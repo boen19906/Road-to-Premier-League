@@ -58,10 +58,10 @@ const LEAGUES = {
 };
 
 const FACILITIES = [
-  { name: 'Training Ground', level: 0, maxLevel: 5, baseCost: 500000, performanceBonus: 2, attendanceBonus: 0, maintenanceCost: 30000 },
-  { name: 'Stadium', level: 0, maxLevel: 5, baseCost: 1000000, performanceBonus: 1, attendanceBonus: 5, maintenanceCost: 50000, capacity: 5000 },
-  { name: 'Youth Academy', level: 0, maxLevel: 5, baseCost: 300000, performanceBonus: 1, attendanceBonus: 0, maintenanceCost: 20000 },
-  { name: 'Medical Center', level: 0, maxLevel: 5, baseCost: 200000, performanceBonus: 2, attendanceBonus: 0, maintenanceCost: 15000 }
+  { name: 'Training Ground', level: 0, maxLevel: 5, baseCost: 1000000, performanceBonus: 1, attendanceBonus: 0, maintenanceCost: 30000 },
+  { name: 'Stadium', level: 0, maxLevel: 5, baseCost: 2000000, performanceBonus: 0, attendanceBonus: 5, maintenanceCost: 50000, capacity: 5000 },
+  { name: 'Youth Academy', level: 0, maxLevel: 5, baseCost: 800000, performanceBonus: 1, attendanceBonus: 0, maintenanceCost: 20000 },
+  { name: 'Medical Center', level: 0, maxLevel: 5, baseCost: 800000, performanceBonus: 1, attendanceBonus: 0, maintenanceCost: 15000 }
 ];
 
 const STADIUM_CAPACITIES = {
@@ -143,11 +143,12 @@ function initializeGame(teamName) {
     contractNegotiations: [],
     averageAttendance: 0,
     totalAttendance: 0,
+    accumulatedTicketRevenue: 0,
     homeGames: 0
   };
   
   // Generate initial squad
-  const positions = { GK: 1, DEF: 8, MID: 8, FWD: 6 };
+  const positions = { GK: 3, DEF: 8, MID: 8, FWD: 6 };
   
   Object.entries(positions).forEach(([pos, count]) => {
     for (let i = 0; i < count; i++) {
@@ -266,10 +267,72 @@ function generateStandings(league, playerTeam) {
   const teams = [playerTeam, ...TEAM_NAMES[league].slice(0, leagueData.teams - 1)];
   
   return teams.map((team, index) => {
-    // Generate team rating based on league with more variance
-    const baseRating = 50 + (6 - league) * 8;
-    const variance = 12; // Teams can be ±12 from average
-    const teamRating = Math.round(baseRating + (Math.random() - 0.5) * variance * 2);
+    // League-specific rating ranges
+    let minRating, maxRating;
+    
+    switch(league) {
+      case 5: // National League
+        minRating = 50;
+        maxRating = 66; // Now top teams can reach 66 (vs player pool of 45-68)
+        break;
+      case 4: // League Two
+        minRating = 58;
+        maxRating = 71; // Top teams 71 (vs player pool of 55-72)
+        break;
+      case 3: // League One
+        minRating = 64;
+        maxRating = 76; // Top teams 76 (vs player pool of 60-76)
+        break;
+      case 2: // Championship
+        minRating = 70;
+        maxRating = 82; // Top teams 82 (vs player pool of 65-82)
+        break;
+      case 1: // Premier League
+        minRating = 80;
+        maxRating = 95; // Big 6 are 88-95 (vs player pool of 70-92)
+        break;
+      default:
+        minRating = 50;
+        maxRating = 66;
+    }
+    
+    // Create more realistic distribution
+    // Top teams are much better, bottom teams closer to relegation zone
+    const positionInLeague = index; // 0 = first in list, not necessarily best
+    const totalTeams = leagueData.teams;
+    
+    // Use a curve so top teams are better and there's more spread
+    // This creates a realistic distribution where top 6 are significantly better
+    let teamRating;
+    
+    if (team === playerTeam) {
+      // Player team starts in middle of the pack
+      teamRating = Math.round((minRating + maxRating) / 2);
+    } else {
+      // Create realistic spread with better teams at top
+      const positionFactor = positionInLeague / (totalTeams - 1); // 0 to 1
+      
+      // Use exponential curve for Premier League to create "Big 6" effect
+      if (league === 1 && positionInLeague < 6) {
+        // Top 6 teams are 88-95 rated
+        teamRating = Math.round(95 - (positionInLeague * 1.0));
+      } else if (league === 1) {
+        // Rest of PL: 80-89
+        const restMinRating = 80;
+        const restMaxRating = 89;
+        const adjustedPosition = (positionInLeague - 6) / (totalTeams - 7);
+        teamRating = Math.round(restMaxRating - (adjustedPosition * (restMaxRating - restMinRating)));
+      } else {
+        // Other leagues: more linear but with variance
+        const range = maxRating - minRating;
+        const baseForPosition = maxRating - (positionFactor * range);
+        const variance = range * 0.15; // ±15% variance
+        teamRating = Math.round(baseForPosition + (Math.random() - 0.5) * variance);
+      }
+      
+      // Clamp to min/max
+      teamRating = Math.max(minRating, Math.min(maxRating, teamRating));
+    }
     
     return {
       team,
@@ -283,24 +346,105 @@ function generateStandings(league, playerTeam) {
       points: 0,
       position: index + 1,
       isPlayer: team === playerTeam,
-      rating: team === playerTeam ? 0 : Math.max(40, Math.min(85, teamRating))
+      rating: team === playerTeam ? 0 : teamRating
     };
   });
 }
 
 function calculateTeamRating(squad) {
-  const top11 = [...squad]
-    .sort((a, b) => b.rating - a.rating)
-    .slice(0, 11);
+  if (squad.length === 0) return 0;
   
-  const baseRating = top11.reduce((sum, p) => sum + p.rating, 0) / 11;
+  // Separate players by position
+  const gks = squad.filter(p => p.position === 'GK').sort((a, b) => b.rating - a.rating);
+  const defs = squad.filter(p => p.position === 'DEF').sort((a, b) => b.rating - a.rating);
+  const mids = squad.filter(p => p.position === 'MID').sort((a, b) => b.rating - a.rating);
+  const fwds = squad.filter(p => p.position === 'FWD').sort((a, b) => b.rating - a.rating);
   
+  // Valid formations: [DEF, MID, FWD]
+  const formations = [
+    [4, 4, 2],
+    [4, 3, 3],
+    [4, 5, 1],
+    [5, 4, 1],
+    [5, 3, 2],
+    [3, 5, 2],
+    [3, 4, 3]
+  ];
+  
+  let bestFormation = null;
+  let bestRating = 0;
+  
+  // Try each formation and find the best one
+  formations.forEach(([numDef, numMid, numFwd]) => {
+    // Check if we have enough players for this formation
+    if (gks.length < 1 || defs.length < numDef || 
+        mids.length < numMid || fwds.length < numFwd) {
+      return; // Skip this formation
+    }
+    
+    // Get best players for this formation
+    const starter_gk = gks[0];
+    const starter_defs = defs.slice(0, numDef);
+    const starter_mids = mids.slice(0, numMid);
+    const starter_fwds = fwds.slice(0, numFwd);
+    
+    // Calculate average rating for this formation
+    const allStarters = [starter_gk, ...starter_defs, ...starter_mids, ...starter_fwds];
+    const formationRating = allStarters.reduce((sum, p) => sum + p.rating, 0) / 11;
+    
+    if (formationRating > bestRating) {
+      bestRating = formationRating;
+      bestFormation = {
+        starters: allStarters,
+        formation: [numDef, numMid, numFwd],
+        gk: starter_gk,
+        def: starter_defs,
+        mid: starter_mids,
+        fwd: starter_fwds
+      };
+    }
+  });
+  
+  // Fallback if no valid formation found (shouldn't happen with proper squad)
+  if (!bestFormation) {
+    const sortedSquad = [...squad].sort((a, b) => b.rating - a.rating);
+    const top11 = sortedSquad.slice(0, 11);
+    bestFormation = { starters: top11 };
+  }
+  
+  const starters = bestFormation.starters;
+  const startersAvg = starters.reduce((sum, p) => sum + p.rating, 0) / starters.length;
+  
+  // Get bench players (next best 7 not in starting 11)
+  const starterIds = new Set(starters.map(p => p.id));
+  const nonStarters = squad.filter(p => !starterIds.has(p.id))
+    .sort((a, b) => b.rating - a.rating);
+  
+  const bench = nonStarters.slice(0, 7);
+  const benchAvg = bench.length > 0 
+    ? bench.reduce((sum, p) => sum + p.rating, 0) / bench.length 
+    : startersAvg;
+  
+  // Reserves (rest of squad)
+  const reserves = nonStarters.slice(7);
+  const reservesAvg = reserves.length > 0
+    ? reserves.reduce((sum, p) => sum + p.rating, 0) / reserves.length
+    : benchAvg;
+  
+  // Weighted average: 80% starters, 15% bench, 5% reserves
+  const weightedRating = (startersAvg * 0.80) + (benchAvg * 0.15) + (reservesAvg * 0.05);
+  
+  // Small bonuses from facilities (max +3)
   const facilityBonus = gameState.facilities.reduce((sum, f) => 
-    sum + (f.level * f.performanceBonus), 0);
+    sum + (f.level * f.performanceBonus * 0.3), 0);
   
-  const moraleBonus = (squad.reduce((sum, p) => sum + p.morale, 0) / squad.length - 50) / 5;
+  // Small morale bonus (max ±2)
+  const avgMorale = squad.reduce((sum, p) => sum + p.morale, 0) / squad.length;
+  const moraleBonus = (avgMorale - 50) / 25;
   
-  return Math.round(baseRating + facilityBonus + moraleBonus);
+  const finalRating = weightedRating + facilityBonus + moraleBonus;
+  
+  return Math.round(Math.max(40, Math.min(99, finalRating)));
 }
 
 function simulateMatch(homeTeam, awayTeam, isPlayerHome) {
@@ -340,13 +484,61 @@ function simulateMatch(homeTeam, awayTeam, isPlayerHome) {
 
 function updatePlayerMatchStats(goalsScored) {
   setGameState(prev => {
-    // Get top 11 players by rating (the starters)
-    const starters = [...prev.squad]
-      .sort((a, b) => b.rating - a.rating)
-      .slice(0, 11);
+    // Get starters using the same formation logic as team rating
+    const gks = prev.squad.filter(p => p.position === 'GK').sort((a, b) => b.rating - a.rating);
+    const defs = prev.squad.filter(p => p.position === 'DEF').sort((a, b) => b.rating - a.rating);
+    const mids = prev.squad.filter(p => p.position === 'MID').sort((a, b) => b.rating - a.rating);
+    const fwds = prev.squad.filter(p => p.position === 'FWD').sort((a, b) => b.rating - a.rating);
     
+    // Valid formations: [DEF, MID, FWD]
+    const formations = [
+      [4, 4, 2],
+      [4, 3, 3],
+      [4, 5, 1],
+      [5, 4, 1],
+      [5, 3, 2],
+      [3, 5, 2],
+      [3, 4, 3]
+    ];
+    
+    let bestFormation = null;
+    let bestRating = 0;
+    
+    // Try each formation and find the best one
+    formations.forEach(([numDef, numMid, numFwd]) => {
+      // Check if we have enough players for this formation
+      if (gks.length < 1 || defs.length < numDef || 
+          mids.length < numMid || fwds.length < numFwd) {
+        return; // Skip this formation
+      }
+      
+      // Get best players for this formation
+      const starter_gk = gks[0];
+      const starter_defs = defs.slice(0, numDef);
+      const starter_mids = mids.slice(0, numMid);
+      const starter_fwds = fwds.slice(0, numFwd);
+      
+      // Calculate average rating for this formation
+      const allStarters = [starter_gk, ...starter_defs, ...starter_mids, ...starter_fwds];
+      const formationRating = allStarters.reduce((sum, p) => sum + p.rating, 0) / 11;
+      
+      if (formationRating > bestRating) {
+        bestRating = formationRating;
+        bestFormation = {
+          starters: allStarters,
+          formation: [numDef, numMid, numFwd]
+        };
+      }
+    });
+    
+    // Fallback if no valid formation found
+    if (!bestFormation) {
+      const sortedSquad = [...prev.squad].sort((a, b) => b.rating - a.rating);
+      bestFormation = { starters: sortedSquad.slice(0, 11) };
+    }
+    
+    const starters = bestFormation.starters;
     const starterIds = new Set(starters.map(p => p.id));
-    
     // Track goals assigned to ensure we match the match score
     let goalsAssigned = 0;
     const goalScorers = [];
@@ -391,7 +583,7 @@ function updatePlayerMatchStats(goalsScored) {
       }
     }
     
-    const updatedSquad = prev.squad.map(player => {
+    let updatedSquad = prev.squad.map(player => {
       const isStarter = starterIds.has(player.id);
       
       // Starters play 95% of games, bench players 30%
@@ -406,30 +598,6 @@ function updatePlayerMatchStats(goalsScored) {
       const goalsThisMatch = goalScorers.filter(id => id === player.id).length;
       newStats.goals += goalsThisMatch;
       
-      // Assists - for each goal, someone gets an assist
-      if (goalsScored > 0 && player.position !== 'GK') {
-        let assistChance = 0;
-        
-        if (player.position === 'MID') {
-          assistChance = isStarter ? 0.35 : 0.1;
-        } else if (player.position === 'FWD') {
-          assistChance = isStarter ? 0.25 : 0.08;
-        } else if (player.position === 'DEF') {
-          assistChance = isStarter ? 0.08 : 0.02;
-        }
-        
-        const passingMultiplier = (player.stats.passing / 65);
-        assistChance *= passingMultiplier;
-        
-        // Check for each goal
-        for (let i = 0; i < goalsScored; i++) {
-          if (Math.random() < assistChance) {
-            newStats.assists++;
-            break; // Max 1 assist per match
-          }
-        }
-      }
-      
       // Cards - more likely for defenders and physical players
       const cardChance = player.position === 'DEF' ? 0.12 : 0.08;
       if (Math.random() < cardChance) newStats.yellowCards++;
@@ -437,7 +605,70 @@ function updatePlayerMatchStats(goalsScored) {
       
       return { ...player, seasonStats: newStats };
     });
-    
+
+    // NOW assign assists - one assist per goal (with some unassisted)
+    const eligibleAssisters = updatedSquad.filter(p => {
+      const isStarter = starterIds.has(p.id);
+      const playChance = isStarter ? 0.95 : 0.3;
+      // Only players who played can assist
+      return p.position !== 'GK' && p.seasonStats.appearances > 0;
+    });
+
+    for (let i = 0; i < goalsScored; i++) {
+      // 10% chance the goal is unassisted (e.g., solo effort, defensive error)
+      if (Math.random() < 0.10) continue;
+      
+      // Calculate assist probability for each player
+      const assistProbabilities = eligibleAssisters.map(player => {
+        const isStarter = starterIds.has(player.id);
+        let assistChance = 0;
+        
+        // Midfielders are the primary assist providers
+        if (player.position === 'MID') {
+          assistChance = isStarter ? 0.50 : 0.12;
+        } else if (player.position === 'FWD') {
+          // Forwards assist each other frequently
+          assistChance = isStarter ? 0.35 : 0.10;
+        } else if (player.position === 'DEF') {
+          // Defenders occasionally assist (crosses, set pieces)
+          assistChance = isStarter ? 0.15 : 0.03;
+        }
+        
+        // Weight heavily by passing ability and overall rating
+        const passingMultiplier = (player.stats.passing / 65);
+        const ratingMultiplier = (player.rating / 65);
+        assistChance *= passingMultiplier * ratingMultiplier;
+        
+        return { player, assistChance };
+      });
+      
+      // Pick one assister based on probability
+      const totalChance = assistProbabilities.reduce((sum, p) => sum + p.assistChance, 0);
+      if (totalChance === 0) continue;
+      
+      let roll = Math.random() * totalChance;
+      
+      for (const { player, assistChance } of assistProbabilities) {
+        roll -= assistChance;
+        if (roll <= 0) {
+          // Find this player in updatedSquad and add assist
+          updatedSquad = updatedSquad.map(p => {
+            if (p.id === player.id) {
+              return {
+                ...p,
+                seasonStats: {
+                  ...p.seasonStats,
+                  assists: p.seasonStats.assists + 1
+                }
+              };
+            }
+            return p;
+          });
+          break;
+        }
+      }
+    }
+
     return { ...prev, squad: updatedSquad };
   });
 }
@@ -531,7 +762,7 @@ function simulateMatchday() {
         
         setGameState(prev => ({
           ...prev,
-          money: prev.money + ticketRevenue,
+          accumulatedTicketRevenue: prev.accumulatedTicketRevenue + ticketRevenue, // Store instead of add
           totalAttendance: prev.totalAttendance + attendance,
           homeGames: prev.homeGames + 1,
           averageAttendance: Math.round((prev.totalAttendance + attendance) / (prev.homeGames + 1))
@@ -658,6 +889,7 @@ function endSeason() {
 
   // Calculate season finances with variance
   const tvRevenue = leagueData.tvRevenue * (0.9 + Math.random() * 0.2);
+  const ticketRevenue = gameState.accumulatedTicketRevenue; // Add this line
   
   // Add promotion bonus
   let promotionBonus = 0;
@@ -668,7 +900,7 @@ function endSeason() {
     else if (gameState.league === 2) promotionBonus = 30000000; // Championship to Premier League
   }
   
-  const totalRevenue = tvRevenue + prize + promotionBonus;
+  const totalRevenue = tvRevenue + prize + promotionBonus + ticketRevenue;
   
   const wagesCost = gameState.squad.reduce((sum, p) => sum + p.salary, 0);
   const facilitiesCost = gameState.facilities.reduce((sum, f) => 
@@ -715,6 +947,7 @@ function endSeason() {
       costs: totalCosts, 
       net: netIncome,
       promotionBonus,
+      ticketRevenue,
       playoffDetails,
       operatingCost,
       wagesCost,
@@ -829,11 +1062,13 @@ function startNewSeason() {
     lastSeasonFinish: null,
     averageAttendance: 0,
     totalAttendance: 0,
+    accumulatedTicketRevenue: 0,
     homeGames: 0
   }));
   
   setView('main');
   setFreeAgentMessage(null);
+  setSelectedPlayer(null);
 }
 
 function getOrdinal(n) {
@@ -952,7 +1187,7 @@ function negotiateContract(player, offer) {
 function offerContract(player, years, salary) {
   const totalCost = salary * years;
   
-  if (totalCost > gameState.money) {
+  if (salary > gameState.money) {
     alert('Not enough money for this contract!');
     return;
   }
@@ -985,7 +1220,7 @@ function offerContract(player, years, salary) {
         money: prev.money - signingBonus
       }));
       
-      setFreeAgentMessage({ player: player.name, accepted: true, marketValue });
+      setFreeAgentMessage({ player: player.name, accepted: true, agreedSalary: salary });
       setSelectedPlayer(null);
     } else {
       setGameState(prev => ({
@@ -1009,7 +1244,7 @@ function offerContract(player, years, salary) {
     }));
     
     if (accepted) {
-      setFreeAgentMessage({ player: player.name, accepted: true, isRenewal: true, marketValue });
+      setFreeAgentMessage({ player: player.name, accepted: true, agreedSalary: salary });
     } else {
       setFreeAgentMessage({ player: player.name, accepted: false, isRenewal: true, marketValue, offer: salary });
     }
@@ -1035,7 +1270,7 @@ function upgradeFacility(facilityName) {
     return;
   }
   
-  const cost = facility.baseCost * Math.pow(2, facility.level + 1) * (gameState.league / 5);
+  const cost = facility.baseCost * Math.pow(3, facility.level + 1) * (gameState.league / 5);
   
   if (gameState.money < cost) {
     alert('Not enough money to upgrade!');
@@ -1201,7 +1436,7 @@ if (view === 'freeagents') {
         <div className="header-card">
           <div className="header-content">
             <h2>Free Agent Market</h2>
-            <button onClick={() => { setView('main'); setFreeAgentMessage(null); }} className="btn btn-secondary">
+            <button onClick={() => { setView('main'); setFreeAgentMessage(null); setSelectedPlayer(null); }} className="btn btn-secondary">
               Back to Main
             </button>
           </div>
@@ -1217,11 +1452,11 @@ if (view === 'freeagents') {
                 ? `✓ ${freeAgentMessage.player} has signed with your club!` 
                 : `✗ ${freeAgentMessage.player} has rejected your offer.`}
             </div>
-            {freeAgentMessage.marketValue && (
+            {freeAgentMessage.agreedSalary && (
               <div className="message-details">
                 {freeAgentMessage.accepted ? (
                   <span className="text-success">
-                    Agreed Terms: £{(freeAgentMessage.marketValue / 1000).toFixed(0)}k/year
+                    Agreed Terms: £{(freeAgentMessage.agreedSalary / 1000).toFixed(0)}k/year
                   </span>
                 ) : (
                   <span className="text-warning">
@@ -1351,7 +1586,11 @@ if (view === 'standings') {
         <div className="header-card">
           <div className="header-content">
             <h2>{leagueData.name} Standings</h2>
-            <button onClick={() => setView('main')} className="btn btn-secondary">
+            <button onClick={() => { 
+              setView('main'); 
+              setFreeAgentMessage(null); 
+              setSelectedPlayer(null);
+            }} className="btn btn-secondary">
               Back to Main
             </button>
           </div>
@@ -1425,33 +1664,6 @@ if (view === 'standings') {
           </div>
         </div>
 
-        {gameState.matches.length > 0 && (
-          <div className="matches-card">
-            <h3 className="section-title">Recent Results</h3>
-            <div className="matches-grid">
-              {gameState.matches.slice(0, 10).map((match, index) => (
-                <div 
-                  key={index} 
-                  className={`match-result ${
-                    match.homeTeam === gameState.teamName || match.awayTeam === gameState.teamName 
-                      ? 'match-player' 
-                      : ''
-                  }`}
-                >
-                  <div className="match-content">
-                    <span className={match.homeTeam === gameState.teamName ? 'text-bold' : ''}>
-                      {match.homeTeam}
-                    </span>
-                    <span className="match-score">{match.homeGoals} - {match.awayGoals}</span>
-                    <span className={match.awayTeam === gameState.teamName ? 'text-bold' : ''}>
-                      {match.awayTeam}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -1703,7 +1915,11 @@ return (
           )}
           
           <button
-            onClick={() => setView('freeagents')}
+            onClick={() => {
+              setSelectedPlayer(null);
+              setFreeAgentMessage(null);
+              setView('freeagents');
+            }}
             className="btn btn-primary btn-bold"
           >
             <UserPlus size={20} />
@@ -1793,12 +2009,26 @@ return (
       )}
 
       <div className="main-grid">
-        {/* Recent Matches - Top during simulation */}
-        {gameState.matches.length > 0 && gameState.seasonPhase === 'regular' && (
-          <div className="matches-card full-width">
-            <h2 className="section-title">Latest Results - Matchday {gameState.matchday}</h2>
-            <div className="matches-grid-three">
-              {gameState.matches.slice(0, 6).map((match, index) => {
+      {/* Recent Matches - Top during simulation */}
+      {gameState.matches.length > 0 && gameState.seasonPhase === 'regular' && (
+        <div className="matches-card full-width">
+          <h2 className="section-title">Latest Results - Matchday {gameState.matchday}</h2>
+          <div className="matches-grid-three">
+            {(() => {
+              // Separate player match from other matches
+              const playerMatch = gameState.matches.find(m => 
+                m.homeTeam === gameState.teamName || m.awayTeam === gameState.teamName
+              );
+              const otherMatches = gameState.matches.filter(m => 
+                m.homeTeam !== gameState.teamName && m.awayTeam !== gameState.teamName
+              );
+              
+              // Show player match first, then fill with other matches (max 6 total)
+              const matchesToShow = playerMatch 
+                ? [playerMatch, ...otherMatches.slice(0, 5)]
+                : gameState.matches.slice(0, 6);
+              
+              return matchesToShow.map((match, index) => {
                 const isPlayerMatch = match.homeTeam === gameState.teamName || match.awayTeam === gameState.teamName;
                 const playerIsHome = match.homeTeam === gameState.teamName;
                 let resultClass = '';
@@ -1829,10 +2059,11 @@ return (
                     </div>
                   </div>
                 );
-              })}
-            </div>
+              });
+            })()}
           </div>
-        )}
+        </div>
+      )}
 
         {/* Squad */}
         <div className="squad-card">
@@ -2022,44 +2253,6 @@ return (
               </div>
             </div>
           </div>
-
-          {/* Recent Matches */}
-          {gameState.matches.length > 0 && (
-            <div className="recent-matches-card">
-              <h2 className="section-title">Recent Results</h2>
-              <div className="recent-matches-list">
-                {gameState.matches.slice(0, 5).map((match, index) => {
-                  const isPlayerMatch = match.homeTeam === gameState.teamName || match.awayTeam === gameState.teamName;
-                  const playerIsHome = match.homeTeam === gameState.teamName;
-                  let resultClass = '';
-                  
-                  if (isPlayerMatch) {
-                    if (match.result === 'draw') {
-                      resultClass = 'match-draw';
-                    } else if ((playerIsHome && match.result === 'home') || (!playerIsHome && match.result === 'away')) {
-                      resultClass = 'match-win';
-                    } else {
-                      resultClass = 'match-loss';
-                    }
-                  }
-                  
-                  return (
-                    <div key={index} className={`recent-match ${resultClass}`}>
-                      <div className="recent-match-content">
-                        <span className={match.homeTeam === gameState.teamName ? 'text-bold' : ''}>
-                          {match.homeTeam.length > 15 ? match.homeTeam.substring(0, 13) + '...' : match.homeTeam}
-                        </span>
-                        <span className="text-bold">{match.homeGoals} - {match.awayGoals}</span>
-                        <span className={match.awayTeam === gameState.teamName ? 'text-bold' : ''}>
-                          {match.awayTeam.length > 15 ? match.awayTeam.substring(0, 13) + '...' : match.awayTeam}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>
