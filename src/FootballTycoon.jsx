@@ -3,6 +3,38 @@ import { Play, Pause, Users, TrendingUp, Building, Trophy, DollarSign, UserPlus,
 import './FootballTycoon.css';
 
 const FootballTycoon = () => {
+  const SAVE_KEY = 'footballTycoonSave';
+
+  // Save game to localStorage
+  function saveGame(state) {
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+    } catch (error) {
+      console.error('Failed to save game:', error);
+    }
+  }
+
+  // Load game from localStorage
+  function loadGame() {
+    try {
+      const saved = localStorage.getItem(SAVE_KEY);
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (error) {
+      console.error('Failed to load game:', error);
+    }
+    return null;
+  }
+
+  // Delete save
+  function deleteSave() {
+    try {
+      localStorage.removeItem(SAVE_KEY);
+    } catch (error) {
+      console.error('Failed to delete save:', error);
+    }
+  }
 // League structure with realistic financial data
 const LEAGUES = {
   5: { 
@@ -66,62 +98,78 @@ const FACILITIES = [
 
 const STADIUM_CAPACITIES = {
   0: 3000,
-  1: 5000,
-  2: 8000,
-  3: 12000,
-  4: 18000,
-  5: 25000
+  1: 8000,
+  2: 12000,
+  3: 18000,
+  4: 25000,
+  5: 50000
 };
 
 const POSITIONS = ['GK', 'DEF', 'MID', 'FWD'];
 
 const TEAM_NAMES = {
-  5: [ // National League
+  5: [ // National League - add more teams
     'Eastleigh FC', 'Halifax Town', 'Barrow AFC', 'Gateshead FC', 'Aldershot Town',
     'Southend United', 'Yeovil Town', 'Oldham Athletic', 'Bromley FC', 'Solihull Moors',
     'Hartlepool United', 'Dagenham & Redbridge', 'Ebbsfleet United', 'Sutton United',
     'Woking FC', 'Altrincham FC', 'Maidenhead United', 'Boreham Wood', 'Dorking Wanderers',
-    'Wealdstone FC', 'York City', 'Rochdale AFC', 'FC Halifax Town'
+    'Wealdstone FC', 'York City', 'Rochdale AFC', 'FC Halifax Town', 'Chesterfield FC',
+    // Add more reserve teams
+    'Tamworth FC', 'Kidderminster', 'Forest Green', 'Torquay United', 'Wrexham AFC',
+    'Notts County', 'Stockport County', 'Macclesfield Town', 'Chester FC'
   ],
-  4: [ // League Two
+  4: [ // League Two - add more
     'Stockport County', 'Wrexham AFC', 'Notts County', 'Mansfield Town', 'Crawley Town',
     'Doncaster Rovers', 'Crewe Alexandra', 'Bradford City', 'Grimsby Town', 'Salford City',
     'Harrogate Town', 'Colchester United', 'Swindon Town', 'Walsall FC', 'Newport County',
     'Tranmere Rovers', 'Barrow AFC', 'AFC Wimbledon', 'Morecambe FC', 'Gillingham FC',
-    'Carlisle United', 'Accrington Stanley', 'Chesterfield FC'
+    'Carlisle United', 'Accrington Stanley', 'Chesterfield FC', 'Bromley FC',
+    // Add more
+    'Oldham Athletic', 'Scunthorpe United', 'Southend United', 'Stevenage FC'
   ],
-  3: [ // League One
+  3: [ // League One - add more
     'Bolton Wanderers', 'Derby County', 'Portsmouth FC', 'Oxford United', 'Barnsley FC',
     'Peterborough United', 'Blackpool FC', 'Lincoln City', 'Stevenage FC', 'Northampton Town',
     'Reading FC', 'Exeter City', 'Charlton Athletic', 'Wycombe Wanderers', 'Leyton Orient',
     'Burton Albion', 'Bristol Rovers', 'Shrewsbury Town', 'Cambridge United', 'Fleetwood Town',
-    'Port Vale', 'Cheltenham Town', 'Carlisle United'
+    'Port Vale', 'Cheltenham Town', 'Carlisle United', 'MK Dons',
+    // Add more
+    'Ipswich Town', 'Sunderland AFC', 'Sheffield Wednesday', 'Plymouth Argyle'
   ],
-  2: [ // Championship
+  2: [ // Championship - add more
     'Leeds United', 'Leicester City', 'Ipswich Town', 'Southampton FC', 'West Bromwich Albion',
     'Norwich City', 'Coventry City', 'Hull City', 'Middlesbrough FC', 'Preston North End',
     'Bristol City', 'Swansea City', 'Sheffield Wednesday', 'Stoke City', 'Millwall FC',
     'Blackburn Rovers', 'Watford FC', 'Queens Park Rangers', 'Cardiff City', 'Plymouth Argyle',
-    'Birmingham City', 'Rotherham United', 'Huddersfield Town'
+    'Birmingham City', 'Rotherham United', 'Huddersfield Town', 'Sunderland AFC',
+    // Add more
+    'Derby County', 'Portsmouth FC', 'Sheffield United', 'Burnley FC'
   ],
   1: [ // Premier League
     'Manchester City', 'Arsenal FC', 'Liverpool FC', 'Aston Villa', 'Tottenham Hotspur',
     'Chelsea FC', 'Newcastle United', 'Manchester United', 'West Ham United', 'Brighton & Hove Albion',
     'Bournemouth AFC', 'Crystal Palace', 'Fulham FC', 'Wolverhampton Wanderers', 'Everton FC',
-    'Brentford FC', 'Nottingham Forest', 'Luton Town', 'Burnley FC'
+    'Brentford FC', 'Nottingham Forest', 'Luton Town', 'Burnley FC', 'Sheffield United',
+    // These are extras for when teams get relegated/promoted
+    'Leeds United', 'Leicester City', 'Southampton FC', 'Ipswich Town'
   ]
 };
 
 const [freeAgentMessage, setFreeAgentMessage] = useState(null);
+const [transferMessage, setTransferMessage] = useState(null);
 
-const [view, setView] = useState('start'); // start, main, freeagents, standings, contracts, gameover
+const [view, setView] = useState('start'); // start, main, freeagents, standings, contracts, gameover, transfer
 const [selectedPlayer, setSelectedPlayer] = useState(null);
 const [contractOffer, setContractOffer] = useState({ years: 1, salary: 0 });
 const [teamNameInput, setTeamNameInput] = useState('');
 const [gameOverReason, setGameOverReason] = useState(null);
 
 // Initialize game state
-const [gameState, setGameState] = useState(null);
+const [gameState, setGameState] = useState(() => {
+  // Try to load saved game on initial mount
+  const savedGame = loadGame();
+  return savedGame;
+});
 
 function initializeGame(teamName) {
   const initialState = {
@@ -144,7 +192,9 @@ function initializeGame(teamName) {
     averageAttendance: 0,
     totalAttendance: 0,
     accumulatedTicketRevenue: 0,
-    homeGames: 0
+    homeGames: 0,
+    transferOffers: [], // Track transfer offers for players
+    isTransferWindow: false, // Whether transfer window is open
   };
   
   // Generate initial squad
@@ -771,11 +821,20 @@ function simulateMatchday() {
     }
   }
   
-  setGameState(prev => ({
-    ...prev,
-    matches: [...newMatches, ...prev.matches].slice(0, 50), // Keep last 50 matches
-    matchday: prev.matchday + 1
-  }));
+  setGameState(prev => {
+    const newMatchday = prev.matchday + 1;
+    const leagueData = LEAGUES[prev.league];
+    const transferWindowStart = Math.floor((leagueData.teams - 1) * 0.5); // Opens at halfway point
+    const transferWindowEnd = transferWindowStart + 4; // Stays open for 4 matchdays
+    
+    return {
+      ...prev,
+      matches: [...newMatches, ...prev.matches].slice(0, 50),
+      matchday: newMatchday,
+      isTransferWindow: newMatchday >= transferWindowStart && newMatchday <= transferWindowEnd
+    };
+  });
+
 }
 
 function endSeason() {
@@ -884,7 +943,7 @@ function endSeason() {
     relegated = true;
     message = `📉 Relegated to ${LEAGUES[gameState.league + 1].name}. Finished ${playerStanding.position}${getOrdinal(playerStanding.position)}.`;
   } else {
-    message = `Finished ${playerStanding.position}${getOrdinal(playerStanding.position)} in ${leagueData.name}.`;
+    message = `😐 Finished ${playerStanding.position}${getOrdinal(playerStanding.position)} in ${leagueData.name}.`;
   }
 
   // Calculate season finances with variance
@@ -975,6 +1034,45 @@ function simulatePlayoffLeg(homeRating, awayRating) {
   return { home: homeGoals, away: awayGoals };
 }
 
+function processLeaguePromotionRelegation(league, playerPromoted, playerRelegated) {
+  // Get current standings for this league
+  const currentStandings = gameState.standings;
+  
+  // Determine who gets promoted and relegated
+  let promotedTeams = [];
+  let relegatedTeams = [];
+  
+  if (league === 5) {
+    // National League: Top 1 auto, positions 2-7 playoffs
+    // For simplicity, assume top 2 get promoted (champion + playoff winner)
+    promotedTeams = currentStandings.slice(0, 2).map(t => t.team);
+  } else if (league === 1) {
+    // Premier League: Bottom 3 relegated
+    relegatedTeams = currentStandings.slice(-3).map(t => t.team);
+  } else {
+    // Leagues 2-4: Top 3 (or top 2 + playoff winner) promoted, bottom 4 relegated
+    promotedTeams = currentStandings.slice(0, 3).map(t => t.team);
+    relegatedTeams = currentStandings.slice(-4).map(t => t.team);
+  }
+  
+  // Remove player team from these lists
+  promotedTeams = promotedTeams.filter(t => t !== gameState.teamName);
+  relegatedTeams = relegatedTeams.filter(t => t !== gameState.teamName);
+  
+  return { promotedTeams, relegatedTeams };
+}
+
+function getReplacementTeams(league, count, excludeTeams) {
+  // Get teams from the appropriate league that aren't already used
+  const availableTeams = TEAM_NAMES[league].filter(team => 
+    !excludeTeams.includes(team) && team !== gameState.teamName
+  );
+  
+  // Shuffle and return requested count
+  const shuffled = availableTeams.sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, count);
+}
+
 function startNewSeason() {
   // Remove players who rejected contracts or had contracts expire
   const retainedPlayers = gameState.squad.filter(p => {
@@ -1029,31 +1127,126 @@ function startNewSeason() {
         assists: 0,
         yellowCards: 0,
         redCards: 0
-      }
+      },
+      transferOffers: [], // Reset transfer offers
+      isTransferWindow: false // Close transfer window
     };
   });
 
-  // Generate new standings and free agents
+   // Generate new standings with realistic promotion/relegation
   const newLeague = gameState.league;
-  const newStandings = generateStandings(newLeague, gameState.teamName);
+  const leagueData = LEAGUES[newLeague];
   
-  // Update AI team ratings based on previous season performance
-  const updatedStandings = newStandings.map(team => {
-    if (team.isPlayer) return team;
+  // Get teams that should stay in the current league
+  let teamsForNewSeason = [];
+  
+  if (gameState.lastSeasonFinish) {
+    // Process promotion/relegation from last season
+    const { promotedTeams, relegatedTeams } = processLeaguePromotionRelegation(
+      gameState.lastSeasonFinish.league || gameState.league,
+      gameState.lastSeasonFinish.message.includes('promotion'),
+      gameState.lastSeasonFinish.message.includes('Relegated')
+    );
     
-    // Each offseason, teams can change rating by -3 to +3
-    const ratingChange = Math.floor(Math.random() * 7) - 3; // -3, -2, -1, 0, 1, 2, 3
-    const newRating = Math.max(40, Math.min(85, team.rating + ratingChange));
+    // Get teams that weren't promoted or relegated (middle of table)
+    const oldStandings = gameState.standings || [];
+    const stayingTeams = oldStandings
+      .filter(t => !t.isPlayer)
+      .map(t => t.team)
+      .filter(team => !promotedTeams.includes(team) && !relegatedTeams.includes(team));
     
-    return { ...team, rating: newRating };
+    teamsForNewSeason = [...stayingTeams];
+    
+    // Add teams relegated from league above (if not in PL)
+    if (newLeague < 5) {
+      const relegatedFromAbove = getReplacementTeams(newLeague + 1, 3, teamsForNewSeason);
+      teamsForNewSeason = [...teamsForNewSeason, ...relegatedFromAbove];
+    }
+    
+    // Add teams promoted from league below (if not in National League)
+    if (newLeague > 1) {
+      const promotedFromBelow = getReplacementTeams(newLeague - 1, 3, teamsForNewSeason);
+      teamsForNewSeason = [...teamsForNewSeason, ...promotedFromBelow];
+    }
+    
+    // Fill remaining slots with fresh teams if needed
+    const slotsNeeded = leagueData.teams - 1 - teamsForNewSeason.length;
+    if (slotsNeeded > 0) {
+      const fillerTeams = getReplacementTeams(newLeague, slotsNeeded, teamsForNewSeason);
+      teamsForNewSeason = [...teamsForNewSeason, ...fillerTeams];
+    }
+    
+    // Trim to correct size
+    teamsForNewSeason = teamsForNewSeason.slice(0, leagueData.teams - 1);
+  } else {
+    // First season - just generate normally
+    teamsForNewSeason = TEAM_NAMES[newLeague].slice(0, leagueData.teams - 1);
+  }
+  
+  // Add player team
+  const allTeams = [gameState.teamName, ...teamsForNewSeason];
+  
+  // Generate standings with these teams
+  const newStandings = allTeams.map((team, index) => {
+    let minRating, maxRating;
+    
+    switch(newLeague) {
+      case 5: minRating = 50; maxRating = 66; break;
+      case 4: minRating = 58; maxRating = 71; break;
+      case 3: minRating = 64; maxRating = 76; break;
+      case 2: minRating = 70; maxRating = 82; break;
+      case 1: minRating = 80; maxRating = 95; break;
+      default: minRating = 50; maxRating = 66;
+    }
+    
+    let teamRating;
+    const positionInLeague = index;
+    const totalTeams = leagueData.teams;
+    
+    if (team === gameState.teamName) {
+      teamRating = Math.round((minRating + maxRating) / 2);
+    } else {
+      const positionFactor = positionInLeague / (totalTeams - 1);
+      
+      if (newLeague === 1 && positionInLeague < 6) {
+        teamRating = Math.round(95 - (positionInLeague * 1.0));
+      } else if (newLeague === 1) {
+        const restMinRating = 80;
+        const restMaxRating = 89;
+        const adjustedPosition = (positionInLeague - 6) / (totalTeams - 7);
+        teamRating = Math.round(restMaxRating - (adjustedPosition * (restMaxRating - restMinRating)));
+      } else {
+        const range = maxRating - minRating;
+        const baseForPosition = maxRating - (positionFactor * range);
+        const variance = range * 0.15;
+        teamRating = Math.round(baseForPosition + (Math.random() - 0.5) * variance);
+      }
+      
+      teamRating = Math.max(minRating, Math.min(maxRating, teamRating));
+    }
+    
+    return {
+      team,
+      played: 0,
+      won: 0,
+      drawn: 0,
+      lost: 0,
+      goalsFor: 0,
+      goalsAgainst: 0,
+      goalDifference: 0,
+      points: 0,
+      position: index + 1,
+      isPlayer: team === gameState.teamName,
+      rating: team === gameState.teamName ? 0 : teamRating
+    };
   });
-  
+
   const newFreeAgents = generateFreeAgents(newLeague, gameState.reputation, 30);
 
   setGameState(prev => ({
     ...prev,
     squad: updatedSquad,
-    standings: updatedStandings,
+    standings: newStandings,
     freeAgents: newFreeAgents,
     matches: [],
     seasonPhase: 'regular',
@@ -1062,8 +1255,10 @@ function startNewSeason() {
     lastSeasonFinish: null,
     averageAttendance: 0,
     totalAttendance: 0,
+    homeGames: 0,
     accumulatedTicketRevenue: 0,
-    homeGames: 0
+    transferOffers: [],
+    isTransferWindow: false
   }));
   
   setView('main');
@@ -1133,26 +1328,55 @@ function calculateMarketValue(player, league) {
 }
 
 function negotiateContract(player, offer) {
-  const marketValue = calculateMarketValue(player, gameState.league);
   const yearlyOffer = offer.salary;
   
-  const offerRatio = yearlyOffer / marketValue;
+  // Determine player's counteroffer/demand
+  let counterofferValue;
   
-  const optimalRatio = 1.05;
-  const deviation = 0.18;
+  if (player.previousCounteroffer) {
+    // They already stated a demand - can only go down or stay same, NEVER up
+    const marketValue = calculateMarketValue(player, gameState.league);
+    
+    // They might lower their demand slightly (2-5% reduction) to show flexibility
+    const flexibilityReduction = 0.95 + Math.random() * 0.03; // 95-98% of previous
+    const newCounteroffer = Math.floor(player.previousCounteroffer * flexibilityReduction);
+    
+    // But never go below their true market value
+    counterofferValue = Math.max(marketValue, newCounteroffer);
+    
+    // CRITICAL: Never let it go above their previous counteroffer
+    counterofferValue = Math.min(counterofferValue, player.previousCounteroffer);
+    
+  } else {
+    // First time - calculate their market value and set as initial demand
+    const marketValue = calculateMarketValue(player, gameState.league);
+    counterofferValue = Math.max(yearlyOffer, marketValue);
+  }
+  
+  // Now calculate acceptance based on offer vs their counteroffer
+  const offerRatio = yearlyOffer / counterofferValue;
+  
+  const optimalRatio = 1.0;
+  const deviation = 0.15;
   
   const distance = Math.abs(offerRatio - optimalRatio);
   
-  let acceptChance = Math.exp(-Math.pow(distance / deviation, 2)) * 0.88;
+  let acceptChance = Math.exp(-Math.pow(distance / deviation, 2)) * 0.85;
   
+  // Harsher penalties for low offers
   if (offerRatio < 0.6) {
-    acceptChance = 0.01;
+    acceptChance = 0.01; // Insultingly low
   } else if (offerRatio < 0.75) {
-    acceptChance = 0.03 + (offerRatio - 0.6) * 0.2;
-  } else if (offerRatio >= 1.25) {
-    acceptChance = 0.95;
+    acceptChance = 0.05; // Way too low
+  } else if (offerRatio < 0.85) {
+    acceptChance = 0.15; // Still too low
+  } else if (offerRatio >= 0.95) {
+    acceptChance = 0.75; // Close enough - they'll likely accept
+  } else if (offerRatio >= 1.0) {
+    acceptChance = 0.95; // Met their demand - very likely accept
   }
   
+  // Bonuses
   if (offer.years >= 4) {
     acceptChance += 0.12;
   } else if (offer.years >= 3) {
@@ -1177,9 +1401,6 @@ function negotiateContract(player, offer) {
   acceptChance = Math.max(0.01, Math.min(0.98, acceptChance));
   
   const accepted = Math.random() < acceptChance;
-  
-  // Ensure counteroffer is never less than what was offered
-  const counterofferValue = Math.max(yearlyOffer, marketValue);
   
   return { accepted, marketValue: counterofferValue };
 }
@@ -1226,7 +1447,13 @@ function offerContract(player, years, salary) {
       setGameState(prev => ({
         ...prev,
         freeAgents: prev.freeAgents.map(p => 
-          p.id === player.id ? { ...p, status: 'rejected', offer: { years, salary }, marketValue } : p
+          p.id === player.id ? { 
+            ...p, 
+            status: 'rejected', 
+            offer: { years, salary }, 
+            marketValue,
+            previousCounteroffer: marketValue // Store this for next negotiation
+          } : p
         )
       }));
       setFreeAgentMessage({ player: player.name, accepted: false, marketValue, offer: salary });
@@ -1238,7 +1465,13 @@ function offerContract(player, years, salary) {
       ...prev,
       contractNegotiations: prev.contractNegotiations.map(n => 
         n.id === player.id 
-          ? { ...n, offer: { years, salary }, status: accepted ? 'accepted' : 'rejected', marketValue }
+          ? { 
+              ...n, 
+              offer: { years, salary }, 
+              status: accepted ? 'accepted' : 'rejected', 
+              marketValue,
+              previousCounteroffer: marketValue // Store for next negotiation
+            }
           : n
       )
     }));
@@ -1261,6 +1494,174 @@ function releasePlayer(playerId) {
   }
 }
 
+function listPlayerForTransfer(player, askingPrice) {
+  // Calculate market value
+  const marketValue = calculateMarketValue(player, gameState.league);
+  
+  // Determine player quality relative to current league
+  const leagueData = LEAGUES[gameState.league];
+  let playerQualityForLeague = 'average';
+  
+  switch(gameState.league) {
+    case 5: // National League (50-66 team ratings)
+      if (player.rating >= 67) playerQualityForLeague = 'star';
+      else if (player.rating >= 62) playerQualityForLeague = 'good';
+      else if (player.rating >= 55) playerQualityForLeague = 'average';
+      else playerQualityForLeague = 'poor';
+      break;
+    case 4: // League Two (58-71)
+      if (player.rating >= 71) playerQualityForLeague = 'star';
+      else if (player.rating >= 66) playerQualityForLeague = 'good';
+      else if (player.rating >= 60) playerQualityForLeague = 'average';
+      else playerQualityForLeague = 'poor';
+      break;
+    case 3: // League One (64-76)
+      if (player.rating >= 75) playerQualityForLeague = 'star';
+      else if (player.rating >= 70) playerQualityForLeague = 'good';
+      else if (player.rating >= 63) playerQualityForLeague = 'average';
+      else playerQualityForLeague = 'poor';
+      break;
+    case 2: // Championship (70-82)
+      if (player.rating >= 81) playerQualityForLeague = 'star';
+      else if (player.rating >= 76) playerQualityForLeague = 'good';
+      else if (player.rating >= 68) playerQualityForLeague = 'average';
+      else playerQualityForLeague = 'poor';
+      break;
+    case 1: // Premier League (80-95)
+      if (player.rating >= 91) playerQualityForLeague = 'star';
+      else if (player.rating >= 84) playerQualityForLeague = 'good';
+      else if (player.rating >= 78) playerQualityForLeague = 'average';
+      else playerQualityForLeague = 'poor';
+      break;
+  }
+  
+  // Base interest based on player quality in current league context
+  let baseInterest;
+  switch(playerQualityForLeague) {
+    case 'star':
+      baseInterest = 0.95; // Star players always in demand
+      break;
+    case 'good':
+      baseInterest = 0.80; // Good players usually get offers
+      break;
+    case 'average':
+      baseInterest = 0.60; // Average players moderate interest
+      break;
+    case 'poor':
+      baseInterest = 0.25; // Poor players hard to sell
+      break;
+    default:
+      baseInterest = 0.60;
+  }
+  
+  // Adjust for pricing
+  const priceRatio = askingPrice / marketValue;
+  let priceMultiplier = 1.0;
+  
+  if (priceRatio > 1.5) {
+    priceMultiplier = 0.3; // Massively overpriced
+  } else if (priceRatio > 1.3) {
+    priceMultiplier = 0.5; // Significantly overpriced
+  } else if (priceRatio > 1.15) {
+    priceMultiplier = 0.7; // Slightly overpriced
+  } else if (priceRatio < 0.7) {
+    priceMultiplier = 1.4; // Bargain - increases interest
+  } else if (priceRatio < 0.85) {
+    priceMultiplier = 1.2; // Good deal
+  }
+  
+  // Age factor - younger players more desirable
+  let ageFactor = 1.0;
+  if (player.age <= 23) {
+    ageFactor = 1.3; // Young prospects in high demand
+  } else if (player.age <= 26) {
+    ageFactor = 1.15; // Prime age
+  } else if (player.age >= 32) {
+    ageFactor = 0.6; // Older players harder to sell
+  } else if (player.age >= 30) {
+    ageFactor = 0.8; // Aging players
+  }
+  
+  // Position factor - some positions always needed
+  let positionFactor = 1.0;
+  if (player.position === 'GK') {
+    positionFactor = 0.7; // GKs harder to sell (teams only need 1-2)
+  }
+  
+  // Calculate final offer chance
+  let offerChance = baseInterest * priceMultiplier * ageFactor * positionFactor;
+  offerChance = Math.max(0.05, Math.min(0.98, offerChance));
+  
+  const hasOffer = Math.random() < offerChance;
+  
+  if (hasOffer) {
+    // Generate counter offer based on player quality and pricing
+    let offerMultiplier;
+    
+    if (priceRatio > 1.2) {
+      // If overpriced, offers come in much lower
+      offerMultiplier = 0.65 + Math.random() * 0.15; // 65-80% of asking
+    } else if (priceRatio < 0.8) {
+      // If underpriced, might get full price or more
+      offerMultiplier = 0.95 + Math.random() * 0.10; // 95-105% of asking
+    } else {
+      // Fair price, get reasonable offers
+      offerMultiplier = 0.85 + Math.random() * 0.12; // 85-97% of asking
+    }
+    
+    const counterOffer = Math.floor(askingPrice * offerMultiplier);
+    
+    setGameState(prev => ({
+      ...prev,
+      transferOffers: [...prev.transferOffers, {
+        player,
+        askingPrice,
+        counterOffer,
+        status: 'pending',
+        quality: playerQualityForLeague
+      }]
+    }));
+    
+    return { 
+      success: true, 
+      message: `Offer received: £${(counterOffer / 1000).toFixed(0)}k (${playerQualityForLeague} player for this league)`, 
+      counterOffer 
+    };
+  } else {
+    let reason = 'No offers received.';
+    
+    if (playerQualityForLeague === 'poor') {
+      reason = 'No offers - player quality too low for this level.';
+    } else if (priceRatio > 1.3) {
+      reason = 'No offers - asking price too high.';
+    } else if (player.age >= 32) {
+      reason = 'No offers - player may be too old.';
+    } else {
+      reason = 'No offers. Try lowering the price or waiting.';
+    }
+    
+    return { success: false, message: reason };
+  }
+}
+
+function acceptTransferOffer(playerId, offerAmount) {
+  setGameState(prev => ({
+    ...prev,
+    squad: prev.squad.filter(p => p.id !== playerId),
+    money: prev.money + offerAmount,
+    transferOffers: prev.transferOffers.filter(offer => offer.player.id !== playerId)
+  }));
+}
+
+function rejectTransferOffer(playerId) {
+  setGameState(prev => ({
+    ...prev,
+    transferOffers: prev.transferOffers.map(offer => 
+      offer.player.id === playerId ? { ...offer, status: 'rejected' } : offer
+    )
+  }));
+}
+
 function upgradeFacility(facilityName) {
   const facilityIndex = gameState.facilities.findIndex(f => f.name === facilityName);
   const facility = gameState.facilities[facilityIndex];
@@ -1270,7 +1671,7 @@ function upgradeFacility(facilityName) {
     return;
   }
   
-  const cost = facility.baseCost * Math.pow(3, facility.level + 1) * (gameState.league / 5);
+  const cost = facility.baseCost * Math.pow(2, facility.level + 1) * (gameState.league / 5);
   
   if (gameState.money < cost) {
     alert('Not enough money to upgrade!');
@@ -1285,6 +1686,55 @@ function upgradeFacility(facilityName) {
     facilities: updatedFacilities,
     money: prev.money - cost
   }));
+}
+
+function validateRoster(squad) {
+  const total = squad.length;
+  const gks = squad.filter(p => p.position === 'GK').length;
+  const defs = squad.filter(p => p.position === 'DEF').length;
+  const mids = squad.filter(p => p.position === 'MID').length;
+  const fwds = squad.filter(p => p.position === 'FWD').length;
+  
+  const errors = [];
+  
+  // Must have exactly 25 players
+  if (total !== 25) {
+    errors.push(`Must have exactly 25 players (currently ${total})`);
+  }
+  
+  // Minimum requirements per position
+  if (gks < 2) {
+    errors.push(`Need at least 2 goalkeepers (currently ${gks})`);
+  }
+  if (defs < 7) {
+    errors.push(`Need at least 7 defenders (currently ${defs})`);
+  }
+  if (mids < 7) {
+    errors.push(`Need at least 7 midfielders (currently ${mids})`);
+  }
+  if (fwds < 4) {
+    errors.push(`Need at least 4 forwards (currently ${fwds})`);
+  }
+  
+  // Maximum limits per position
+  if (gks > 3) {
+    errors.push(`Maximum 3 goalkeepers (currently ${gks})`);
+  }
+  if (defs > 10) {
+    errors.push(`Maximum 10 defenders (currently ${defs})`);
+  }
+  if (mids > 10) {
+    errors.push(`Maximum 10 midfielders (currently ${mids})`);
+  }
+  if (fwds > 8) {
+    errors.push(`Maximum 8 forwards (currently ${fwds})`);
+  }
+  
+  return {
+    isValid: errors.length === 0,
+    errors,
+    counts: { total, gks, defs, mids, fwds }
+  };
 }
 
 useEffect(() => {
@@ -1306,6 +1756,15 @@ useEffect(() => {
   }
 }, [gameState?.paused, gameState?.matchday, gameState?.seasonPhase]);
 
+// Existing useEffect for simulation...
+
+// Autosave effect
+useEffect(() => {
+  if (gameState && view !== 'start' && view !== 'gameover') {
+    saveGame(gameState);
+  }
+}, [gameState]);
+
 const leagueData = gameState ? LEAGUES[gameState.league] : null;
 const totalMatches = leagueData ? (leagueData.teams - 1) * 2 : 0;
 const weeklyWages = gameState ? gameState.squad.reduce((sum, p) => sum + p.salary, 0) / 52 : 0;
@@ -1314,6 +1773,8 @@ const playerStanding = gameState ? gameState.standings.find(t => t.team === game
 
 // Start Screen
 if (view === 'start') {
+  const hasSavedGame = loadGame() !== null;
+  
   return (
     <div className="game-container">
       <div className="content-wrapper">
@@ -1321,8 +1782,37 @@ if (view === 'start') {
           <h1 className="start-title">Road to the Premier League</h1>
           <p className="start-subtitle">Build your club from the National League to the top of English football</p>
           
+          {hasSavedGame && (
+            <div className="saved-game-notice">
+              <h3>Saved Game Detected!</h3>
+              <div className="button-group">
+                <button
+                  onClick={() => {
+                    const saved = loadGame();
+                    setGameState(saved);
+                    setView('main');
+                  }}
+                  className="btn btn-success btn-large btn-bold"
+                >
+                  Continue Saved Game
+                </button>
+                <button
+                  onClick={() => {
+                    if (window.confirm('Delete saved game and start fresh?')) {
+                      deleteSave();
+                      setGameState(null);
+                    }
+                  }}
+                  className="btn btn-danger"
+                >
+                  Delete Save
+                </button>
+              </div>
+            </div>
+          )}
+          
           <div className="start-form">
-            <h2 className="start-form-title">Create Your Club</h2>
+            <h2 className="start-form-title">{hasSavedGame ? 'Start New Game' : 'Create Your Club'}</h2>
             <div className="form-group">
               <label>Club Name</label>
               <input
@@ -1337,12 +1827,16 @@ if (view === 'start') {
             
             <button
               onClick={() => {
+                if (hasSavedGame && !window.confirm('This will overwrite your saved game. Continue?')) {
+                  return;
+                }
                 const name = teamNameInput.trim() || 'Your Club FC';
+                deleteSave(); // Clear old save
                 initializeGame(name);
               }}
               className="btn btn-success btn-large btn-bold start-button"
             >
-              Start Journey
+              {hasSavedGame ? 'Start New Game' : 'Start Journey'}
             </button>
           </div>
           
@@ -1354,6 +1848,7 @@ if (view === 'start') {
               <li>Upgrade facilities to boost performance</li>
               <li>Navigate through 5 divisions to reach the Premier League</li>
               <li>Survive financially - bankruptcy at -£2M ends the game</li>
+              <li>Auto-saves your progress</li>
             </ul>
           </div>
         </div>
@@ -1439,6 +1934,7 @@ if (view === 'freeagents') {
             <button onClick={() => { setView('main'); setFreeAgentMessage(null); setSelectedPlayer(null); }} className="btn btn-secondary">
               Back to Main
             </button>
+            
           </div>
           <div className="header-stats">
             Balance: £{(gameState.money / 1000000).toFixed(2)}M | Squad Size: {gameState.squad.length}/25
@@ -1833,6 +2329,201 @@ if (view === 'contracts') {
   );
 }
 
+if (view === 'transfers') {
+  
+  return (
+    <div className="game-container">
+      <div className="content-wrapper">
+        <div className="header-card">
+          <div className="header-content">
+            <h2>Transfer Market - Mid-Season Window</h2>
+            <button onClick={() => { 
+              setView('main');
+              setSelectedPlayer(null);
+              setTransferMessage(null);
+            }} className="btn btn-secondary">
+              Back to Main
+            </button>
+          </div>
+          <div className="header-stats">
+            Balance: £{(gameState.money / 1000000).toFixed(2)}M | Squad Size: {gameState.squad.length}/25
+            {(() => {
+              const leagueData = LEAGUES[gameState.league];
+              const transferWindowStart = Math.floor((leagueData.teams - 1) * 0.5);
+              const transferWindowEnd = transferWindowStart + 4;
+              const matchdaysRemaining = transferWindowEnd - gameState.matchday;
+              return ` | Window closes in ${matchdaysRemaining} matchday${matchdaysRemaining !== 1 ? 's' : ''}`;
+            })()}
+          </div>
+        </div>
+
+        {transferMessage && (
+          <div className={`message-card ${transferMessage.success ? 'message-success' : 'message-error'}`}>
+            <div className="message-title">{transferMessage.message}</div>
+            {transferMessage.counterOffer && (
+              <div className="message-details">
+                Your asking price: £{(transferMessage.askingPrice / 1000).toFixed(0)}k | 
+                Counter offer: £{(transferMessage.counterOffer / 1000).toFixed(0)}k
+              </div>
+            )}
+            <button onClick={() => setTransferMessage(null)} className="btn btn-small">
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        {/* Active Transfer Offers */}
+        {gameState.transferOffers.length > 0 && (
+          <div className="transfers-section">
+            <h3 className="section-title">Active Transfer Offers</h3>
+            <div className="player-list">
+              {gameState.transferOffers.filter(offer => offer.status === 'pending').map(offer => (
+                <div key={offer.player.id} className="player-card player-accepted">
+                  <div className="player-header">
+                    <div className="player-info">
+                      <div className="player-name-row">
+                        <span className="player-name">{offer.player.name}</span>
+                        <span className="badge badge-position">{offer.player.position}</span>
+                        <span className={`player-rating rating-${offer.player.rating >= 70 ? 'high' : offer.player.rating >= 60 ? 'medium' : 'low'}`}>
+                          {offer.player.rating} OVR
+                        </span>
+                      </div>
+                      <div className="player-contract-info">
+                        Your asking price: £{(offer.askingPrice / 1000).toFixed(0)}k | 
+                        <span className="text-success"> Offer received: £{(offer.counterOffer / 1000).toFixed(0)}k</span>
+                      </div>
+                    </div>
+                    <div className="button-group">
+                      <button
+                        onClick={() => {
+                          acceptTransferOffer(offer.player.id, offer.counterOffer);
+                          setTransferMessage({
+                            success: true,
+                            message: `${offer.player.name} sold for £${(offer.counterOffer / 1000).toFixed(0)}k!`
+                          });
+                        }}
+                        className="btn btn-success btn-bold"
+                      >
+                        Accept £{(offer.counterOffer / 1000).toFixed(0)}k
+                      </button>
+                      <button
+                        onClick={() => rejectTransferOffer(offer.player.id)}
+                        className="btn btn-danger"
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Your Squad - Available for Transfer */}
+        <div className="transfers-section">
+          <h3 className="section-title">Your Squad - List Players for Transfer</h3>
+          <div className="player-list">
+            {gameState.squad
+              .filter(p => !gameState.transferOffers.some(offer => offer.player.id === p.id && offer.status === 'pending'))
+              .sort((a, b) => b.rating - a.rating)
+              .map(player => {
+                const marketValue = calculateMarketValue(player, gameState.league);
+                const rejectedOffer = gameState.transferOffers.find(o => o.player.id === player.id && o.status === 'rejected');
+                
+                return (
+                  <div key={player.id} className={`player-card ${rejectedOffer ? 'player-rejected' : ''}`}>
+                    <div className="player-header">
+                      <div className="player-info">
+                        <div className="player-name-row">
+                          <span className="player-name">{player.name}</span>
+                          <span className="badge badge-position">{player.position}</span>
+                          <span className={`player-rating rating-${player.rating >= 70 ? 'high' : player.rating >= 60 ? 'medium' : 'low'}`}>
+                            {player.rating} OVR
+                          </span>
+                          <span className="player-age">Age: {player.age}</span>
+                          {rejectedOffer && (
+                            <span className="badge badge-danger">No Offers</span>
+                          )}
+                        </div>
+                        <div className="player-stats">
+                          <div>PAC: {player.stats.pace}</div>
+                          <div>SHO: {player.stats.shooting}</div>
+                          <div>PAS: {player.stats.passing}</div>
+                          <div>DEF: {player.stats.defending}</div>
+                          <div>PHY: {player.stats.physical}</div>
+                        </div>
+                        <div className="player-contract-info">
+                          Current Salary: £{(player.salary / 1000).toFixed(0)}k/year | 
+                          Market Value: ~£{(marketValue / 1000).toFixed(0)}k
+                        </div>
+                        <div className="player-season-stats">
+                          Season: {player.seasonStats.appearances} apps, {player.seasonStats.goals}G, {player.seasonStats.assists}A
+                        </div>
+                      </div>
+                      <div className="player-actions">
+                        <button
+                          onClick={() => setSelectedPlayer(player)}
+                          className="btn btn-primary btn-bold"
+                        >
+                          List for Transfer
+                        </button>
+                      </div>
+                    </div>
+
+                    {selectedPlayer?.id === player.id && (
+                      <div className="contract-offer-section">
+                        <h3 className="section-title">Set Asking Price</h3>
+                        <div className="form-group">
+                          <label>Transfer Fee (£)</label>
+                          <input
+                            type="number"
+                            min="10000"
+                            step="10000"
+                            defaultValue={marketValue}
+                            id={`transfer-${player.id}`}
+                            className="form-input"
+                          />
+                          <div className="form-hint">
+                            Market value: £{(marketValue / 1000).toFixed(0)}k | 
+                            Price too high and you won't get offers
+                          </div>
+                        </div>
+                        <div className="button-group">
+                          <button
+                            onClick={() => {
+                              const priceInput = document.getElementById(`transfer-${player.id}`);
+                              const askingPrice = parseInt(priceInput.value) || marketValue;
+                              const result = listPlayerForTransfer(player, askingPrice);
+                              setTransferMessage({
+                                ...result,
+                                askingPrice
+                              });
+                              setSelectedPlayer(null);
+                            }}
+                            className="btn btn-success btn-bold"
+                          >
+                            List Player
+                          </button>
+                          <button
+                            onClick={() => setSelectedPlayer(null)}
+                            className="btn btn-secondary"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Main view
 return (
   <div className="game-container">
@@ -1860,6 +2551,20 @@ return (
           <div className="header-money">
             <div className="money-amount">£{(gameState.money / 1000000).toFixed(2)}M</div>
             <div className="money-label">Balance</div>
+            <button
+              onClick={() => {
+                if (window.confirm('Resign from your position? This will end your save and return to menu.')) {
+                  deleteSave();
+                  setGameState(null);
+                  setView('start');
+                  setTeamNameInput('');
+                }
+              }}
+              className="btn btn-danger btn-small"
+              style={{ marginTop: '8px' }}
+            >
+              Resign
+            </button>
           </div>
         </div>
         
@@ -1881,59 +2586,80 @@ return (
 
         {/* Controls */}
         <div className="controls">
-          {gameState.seasonPhase === 'regular' && (
-            <>
-              <button
-                onClick={() => setGameState(prev => ({ ...prev, paused: !prev.paused }))}
-                disabled={gameState.matchday >= totalMatches}
-                className={`btn ${gameState.paused ? 'btn-success' : 'btn-danger'} btn-bold ${gameState.matchday >= totalMatches ? 'btn-disabled' : ''}`}
-              >
-                {gameState.paused ? <Play size={20} /> : <Pause size={20} />}
-                {gameState.paused ? 'Play Season' : 'Pause'}
-              </button>
-              
-              {gameState.matchday >= totalMatches && (
-                <button
-                  onClick={endSeason}
-                  className="btn btn-warning btn-bold"
-                >
-                  <Trophy size={20} />
-                  End Season
-                </button>
-              )}
-            </>
-          )}
-
-          {gameState.seasonPhase === 'offseason' && (
+        {gameState.seasonPhase === 'regular' && (
+          <>
             <button
-              onClick={() => setView('contracts')}
-              className="btn btn-warning btn-bold btn-pulse"
+              onClick={() => {
+                const validation = validateRoster(gameState.squad);
+                if (!validation.isValid) {
+                  alert(`Cannot start season:\n\n${validation.errors.join('\n')}`);
+                  return;
+                }
+                setGameState(prev => ({ ...prev, paused: !prev.paused }));
+              }}
+              disabled={gameState.matchday >= totalMatches}
+              className={`btn ${gameState.paused ? 'btn-success' : 'btn-danger'} btn-bold ${gameState.matchday >= totalMatches ? 'btn-disabled' : ''}`}
             >
-              <FileText size={20} />
-              Contract Negotiations ({gameState.contractNegotiations.length})
+              {gameState.paused ? <Play size={20} /> : <Pause size={20} />}
+              {gameState.paused ? 'Play Season' : 'Pause'}
             </button>
-          )}
-          
+            
+            {gameState.matchday >= totalMatches && (
+              <button
+                onClick={endSeason}
+                className="btn btn-warning btn-bold"
+              >
+                <Trophy size={20} />
+                End Season
+              </button>
+            )}
+          </>
+        )}
+
+        {/* NEW: Transfer Window Button */}
+        {gameState.isTransferWindow && gameState.seasonPhase === 'regular' && (
           <button
-            onClick={() => {
-              setSelectedPlayer(null);
-              setFreeAgentMessage(null);
-              setView('freeagents');
-            }}
-            className="btn btn-primary btn-bold"
+            onClick={() => setView('transfers')}
+            className="btn btn-warning btn-bold btn-pulse"
           >
-            <UserPlus size={20} />
-            Free Agents
+            <DollarSign size={20} />
+            Transfer Market (OPEN)
           </button>
-          
+        )}
+
+        {gameState.seasonPhase === 'offseason' && (
           <button
-            onClick={() => setView('standings')}
-            className="btn btn-purple btn-bold"
+            onClick={() => setView('contracts')}
+            className="btn btn-warning btn-bold btn-pulse"
           >
-            <BarChart3 size={20} />
-            Standings
+            <FileText size={20} />
+            Contract Negotiations ({gameState.contractNegotiations.length})
           </button>
-        </div>
+        )}
+        
+        <button
+          onClick={() => {
+            setSelectedPlayer(null);
+            setFreeAgentMessage(null);
+            setView('freeagents');
+          }}
+          className="btn btn-primary btn-bold"
+        >
+          <UserPlus size={20} />
+          Free Agents
+        </button>
+        
+        <button
+          onClick={() => {
+            setSelectedPlayer(null);
+            setView('standings');
+          }}
+          className="btn btn-purple btn-bold"
+        >
+          <BarChart3 size={20} />
+          Standings
+        </button>
+      </div>
       </div>
 
       {/* Last Season Results */}
@@ -2005,7 +2731,24 @@ return (
               <div className="finance-label">Net Income</div>
             </div>
           </div>
-        </div>
+          
+          {/* Add resign button at the bottom */}
+            <div className="season-actions">
+              <button
+                onClick={() => {
+                  if (window.confirm('Are you sure you want to resign? This will end your career and return to the main menu.')) {
+                    deleteSave();
+                    setGameState(null);
+                    setView('start');
+                    setTeamNameInput('');
+                  }
+                }}
+                className="btn btn-danger"
+              >
+                Resign & Start Over
+              </button>
+            </div>
+          </div>
       )}
 
       <div className="main-grid">
@@ -2071,8 +2814,21 @@ return (
             <h2 className="section-title">
               <Users size={24} /> Squad (Team Rating: {teamRating})
             </h2>
-            <div className="squad-size">
-              {gameState.squad.length}/25 players
+            <div className="squad-validation">
+              <div className="squad-size">
+                {gameState.squad.length}/25 players
+              </div>
+              {(() => {
+                const validation = validateRoster(gameState.squad);
+                return (
+                  <div className="squad-breakdown">
+                    GK: {validation.counts.gks} | 
+                    DEF: {validation.counts.defs} | 
+                    MID: {validation.counts.mids} | 
+                    FWD: {validation.counts.fwds}
+                  </div>
+                );
+              })()}
             </div>
           </div>
           
