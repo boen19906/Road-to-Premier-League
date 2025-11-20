@@ -195,6 +195,7 @@
   .btn-small {
     padding: 0.5rem 0.75rem;
     font-size: 0.75rem;
+    margin-top: 0.5rem;
   }
   
   .btn-large {
@@ -748,7 +749,7 @@
   
   .form-group label {
     font-size: 0.875rem;
-    margin-bottom: 0.25rem;
+    margin-bottom: 0.5rem;
   }
   
   .form-input {
