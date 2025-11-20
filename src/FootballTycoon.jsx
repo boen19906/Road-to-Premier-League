@@ -99,10 +99,10 @@ const FACILITIES = [
 const STADIUM_CAPACITIES = {
   0: 3000,
   1: 8000,
-  2: 12000,
-  3: 18000,
-  4: 25000,
-  5: 50000
+  2: 18000,
+  3: 25000,
+  4: 50000,
+  5: 75000
 };
 
 const POSITIONS = ['GK', 'DEF', 'MID', 'FWD'];
@@ -274,7 +274,7 @@ function generatePlayer(position, league, reputation, isYoung = false) {
   const physical = Math.max(30, Math.min(99, rating + Math.floor(Math.random() * 20 - 10)));
   
   return {
-    id: Date.now() + Math.random(),
+    id: crypto.randomUUID(),
     name: `${names.first[Math.floor(Math.random() * names.first.length)]} ${names.last[Math.floor(Math.random() * names.last.length)]}`,
     position,
     rating,
@@ -1412,11 +1412,6 @@ function negotiateContract(player, offer) {
 
 function offerContract(player, years, salary) {
   const totalCost = salary * years;
-  
-  if (salary > gameState.money) {
-    alert('Not enough money for this contract!');
-    return;
-  }
 
   const { accepted, marketValue } = negotiateContract(player, { years, salary });
   
@@ -1448,6 +1443,7 @@ function offerContract(player, years, salary) {
       
       setFreeAgentMessage({ player: player.name, accepted: true, agreedSalary: salary });
       setSelectedPlayer(null);
+      window.scrollTo({ top: 0, behavior: 'smooth' }); // Scroll to top
     } else {
       setGameState(prev => ({
         ...prev,
@@ -2052,24 +2048,39 @@ if (view === 'freeagents') {
                         min="10"
                         step="5"
                         placeholder="0"
-                        value={contractOffer.salary ? Math.round(contractOffer.salary / 1000) : Math.round(player.salary / 1000)}
+                        value={
+                          contractOffer.salary === "" 
+                            ? "" 
+                            : Math.round((contractOffer.salary || player.salary) / 1000)
+                        }
                         onChange={(e) => {
-                          const thousands = parseInt(e.target.value) || 0;
-                          setContractOffer(prev => ({ ...prev, salary: thousands * 1000 }));
+                          const v = e.target.value;
+
+                          // If the user clears the box, store empty string
+                          if (v === "") {
+                            setContractOffer(prev => ({ ...prev, salary: "" }));
+                            return;
+                          }
+
+                          const thousands = parseInt(v, 10);
+                          if (!isNaN(thousands)) {
+                            setContractOffer(prev => ({ ...prev, salary: thousands * 1000 }));
+                          }
                         }}
                         className="form-input"
                       />
+
                       <div className="form-hint">
                         Enter amount in thousands (e.g., 65 = £65,000/year)
                       </div>
                     </div>
                   </div>
                   <div className="contract-summary">
-                    Annual Salary: £{((contractOffer.salary || player.salary) / 1000).toFixed(0)}k/year
+                    Annual Salary: £{((contractOffer.salary || player.salary || 0) / 1000).toFixed(0)}k/year
                     <br />
-                    Total Contract Value: £{((contractOffer.salary || player.salary) * contractOffer.years / 1000).toFixed(0)}k
+                    Total Contract Value: £{((contractOffer.salary || player.salary || 0) * contractOffer.years / 1000).toFixed(0)}k
                     <br />
-                    Signing Bonus: £{((contractOffer.salary || player.salary) * 0.5 / 1000).toFixed(0)}k
+                    Signing Bonus: £{((contractOffer.salary || player.salary || 0) * 0.5 / 1000).toFixed(0)}k
                   </div>
                   <div className="button-group">
                     <button
@@ -2536,6 +2547,7 @@ if (view === 'transfers') {
                                 askingPrice
                               });
                               setSelectedPlayer(null);
+                              window.scrollTo({ top: 0, behavior: 'smooth' }); // Scroll to top
                             }}
                             className="btn btn-success btn-bold"
                           >
