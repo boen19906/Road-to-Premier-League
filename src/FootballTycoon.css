@@ -761,6 +761,12 @@
     color: white;
     font-size: 0.875rem;
   }
+
+  .form-hint {
+    font-size: 12px;
+    color: #94a3b8;
+    margin-top: 4px;
+  }
   
   .contract-summary {
     font-size: 0.875rem;
@@ -1250,6 +1256,41 @@
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   display: flex;
   justify-content: center;
+}
+
+.retirements-section {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 8px;
+  padding: 20px;
+  margin: 20px 0;
+}
+
+.retirements-intro {
+  color: #94a3b8;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.retirements-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.retirement-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(15, 23, 42, 0.5);
+  border-radius: 6px;
+}
+
+.retirement-name {
+  font-weight: 600;
+  color: #e2e8f0;
+  min-width: 150px;
 }
   
   @media (max-width: 640px) {

@@ -972,6 +972,7 @@ function endSeason() {
 
   // Check for bankruptcy - if more than £2M in debt, game over
   if (newBalance < -2000000) {
+    deleteSave(); // Delete the save when game ends
     setGameOverReason({
       reason: 'bankruptcy',
       finalBalance: newBalance,
@@ -984,16 +985,18 @@ function endSeason() {
     return;
   }
 
-  // Prepare contract negotiations
-  const contractNegotiations = gameState.squad
+  // Calculate retiring players and remove them NOW
+  const retirees = gameState.squad.filter(p => p.age >= 34 && Math.random() > 0.3);
+  const squadAfterRetirements = gameState.squad.filter(p => !retirees.some(r => r.id === p.id));
+
+  // Prepare contract negotiations (from squad after retirements)
+  const contractNegotiations = squadAfterRetirements
     .filter(p => p.contractYears <= 1 && p.age < 34)
     .map(p => ({ ...p, offer: null, status: 'pending' }));
 
-  // Remove retiring players
-  const retirees = gameState.squad.filter(p => p.age >= 34 && Math.random() > 0.3);
-
   setGameState(prev => ({
     ...prev,
+    squad: squadAfterRetirements, // Remove retirees immediately
     league: promoted ? Math.max(1, prev.league - 1) : (relegated ? Math.min(5, prev.league + 1) : prev.league),
     season: prev.season + 1,
     matchday: 0,
@@ -1003,23 +1006,20 @@ function endSeason() {
       ...playerStanding, 
       message, 
       revenue: totalRevenue, 
+      ticketRevenue,
       costs: totalCosts, 
       net: netIncome,
       promotionBonus,
-      ticketRevenue,
       playoffDetails,
       operatingCost,
       wagesCost,
-      facilitiesCost
+      facilitiesCost,
+      retirees: retirees.map(p => ({ name: p.name, position: p.position, rating: p.rating }))
     },
     seasonPhase: 'offseason',
     contractNegotiations,
     paused: true
   }));
-
-  if (retirees.length > 0) {
-    alert(`${retirees.map(p => p.name).join(', ')} have retired from professional football.`);
-  }
 }
 
 function simulatePlayoffLeg(homeRating, awayRating) {
@@ -1350,11 +1350,18 @@ function negotiateContract(player, offer) {
   } else {
     // First time - calculate their market value and set as initial demand
     const marketValue = calculateMarketValue(player, gameState.league);
-    counterofferValue = Math.max(yearlyOffer, marketValue);
+    // Always counteroffer at LEAST 5% more than the offer if offer is close to market value
+    counterofferValue = Math.max(marketValue, yearlyOffer * 1.05);
   }
   
   // Now calculate acceptance based on offer vs their counteroffer
   const offerRatio = yearlyOffer / counterofferValue;
+  
+  // If the offer equals or exceeds their counteroffer, they should accept
+  if (offerRatio >= 0.98) {
+    // Close enough to their demand - very high acceptance
+    return { accepted: Math.random() < 0.90, marketValue: counterofferValue };
+  }
   
   const optimalRatio = 1.0;
   const deviation = 0.15;
@@ -1372,8 +1379,6 @@ function negotiateContract(player, offer) {
     acceptChance = 0.15; // Still too low
   } else if (offerRatio >= 0.95) {
     acceptChance = 0.75; // Close enough - they'll likely accept
-  } else if (offerRatio >= 1.0) {
-    acceptChance = 0.95; // Met their demand - very likely accept
   }
   
   // Bonuses
@@ -1457,7 +1462,6 @@ function offerContract(player, years, salary) {
         )
       }));
       setFreeAgentMessage({ player: player.name, accepted: false, marketValue, offer: salary });
-      setSelectedPlayer(null);
     }
   } else if (view === 'contracts') {
     // Contract renewal
@@ -1765,6 +1769,13 @@ useEffect(() => {
   }
 }, [gameState]);
 
+// Clear selected player when returning to main view
+useEffect(() => {
+  if (view === 'main' && selectedPlayer) {
+    setSelectedPlayer(null);
+  }
+}, [view]);
+
 const leagueData = gameState ? LEAGUES[gameState.league] : null;
 const totalMatches = leagueData ? (leagueData.teams - 1) * 2 : 0;
 const weeklyWages = gameState ? gameState.squad.reduce((sum, p) => sum + p.salary, 0) / 52 : 0;
@@ -1870,7 +1881,7 @@ if (view === 'gameover') {
               <>
                 <h2 className="gameover-reason">Financial Collapse</h2>
                 <p className="gameover-text">
-                  Your club has gone into administration with debts of <span className="text-danger">£{(gameOverReason.debt / 1000000).toFixed(2)}M</span>
+                  {gameState?.teamName || 'Your club'} has gone into administration with debts of <span className="text-danger">£{(gameOverReason.debt / 1000000).toFixed(2)}M</span>
                 </p>
               </>
             )}
@@ -2035,18 +2046,27 @@ if (view === 'freeagents') {
                       />
                     </div>
                     <div className="form-group">
-                      <label>Annual Salary (£)</label>
+                      <label>Annual Salary (£000s)</label>
                       <input
                         type="number"
-                        min="10000"
-                        step="5000"
-                        value={contractOffer.salary || player.salary}
-                        onChange={(e) => setContractOffer(prev => ({ ...prev, salary: parseInt(e.target.value) }))}
+                        min="10"
+                        step="5"
+                        placeholder="0"
+                        value={contractOffer.salary ? Math.round(contractOffer.salary / 1000) : Math.round(player.salary / 1000)}
+                        onChange={(e) => {
+                          const thousands = parseInt(e.target.value) || 0;
+                          setContractOffer(prev => ({ ...prev, salary: thousands * 1000 }));
+                        }}
                         className="form-input"
                       />
+                      <div className="form-hint">
+                        Enter amount in thousands (e.g., 65 = £65,000/year)
+                      </div>
                     </div>
                   </div>
                   <div className="contract-summary">
+                    Annual Salary: £{((contractOffer.salary || player.salary) / 1000).toFixed(0)}k/year
+                    <br />
                     Total Contract Value: £{((contractOffer.salary || player.salary) * contractOffer.years / 1000).toFixed(0)}k
                     <br />
                     Signing Bonus: £{((contractOffer.salary || player.salary) * 0.5 / 1000).toFixed(0)}k
@@ -2230,7 +2250,16 @@ if (view === 'contracts') {
                       <div>PHY: {player.stats.physical}</div>
                     </div>
                     <div className="player-contract-info">
-                      Current Salary: £{(player.salary / 1000).toFixed(0)}k/year | Contract Expires: End of Season
+                      {player.status === 'accepted' ? (
+                        <>
+                          New Contract: £{(player.offer.salary / 1000).toFixed(0)}k/year for {player.offer.years} years | 
+                          <span className="text-success"> Agreed!</span>
+                        </>
+                      ) : (
+                        <>
+                          Current Salary: £{(player.salary / 1000).toFixed(0)}k/year | Contract Expires: End of Season
+                        </>
+                      )}
                     </div>
                     <div className="player-season-stats">
                       Season Stats: {player.seasonStats.appearances} apps, {player.seasonStats.goals} goals, {player.seasonStats.assists} assists
@@ -2276,15 +2305,19 @@ if (view === 'contracts') {
                         />
                       </div>
                       <div className="form-group">
-                        <label>Annual Salary (£)</label>
+                        <label>Annual Salary (£000s)</label>
                         <input
                           type="number"
-                          min="10000"
-                          step="5000"
-                          defaultValue={player.marketValue || Math.floor(player.salary * 1.1)}
+                          min="10"
+                          step="5"
+                          placeholder="0"
+                          defaultValue={Math.round((player.marketValue || Math.floor(player.salary * 1.1)) / 1000)}
                           id={`salary-${player.id}`}
                           className="form-input"
                         />
+                        <div className="form-hint">
+                          Enter amount in thousands (e.g., 65 = £65,000/year)
+                        </div>
                       </div>
                     </div>
                     <button
@@ -2292,7 +2325,8 @@ if (view === 'contracts') {
                         const yearsInput = document.getElementById(`years-${player.id}`);
                         const salaryInput = document.getElementById(`salary-${player.id}`);
                         const years = parseInt(yearsInput.value) || 2;
-                        const salary = parseInt(salaryInput.value) || player.salary;
+                        const salaryInThousands = parseInt(salaryInput.value) || 0;
+                        const salary = salaryInThousands * 1000;
                         offerContract(player, years, salary);
                       }}
                       className="btn btn-primary btn-bold"
@@ -2475,25 +2509,27 @@ if (view === 'transfers') {
                       <div className="contract-offer-section">
                         <h3 className="section-title">Set Asking Price</h3>
                         <div className="form-group">
-                          <label>Transfer Fee (£)</label>
+                          <label>Transfer Fee (£000s)</label>
                           <input
                             type="number"
-                            min="10000"
-                            step="10000"
-                            defaultValue={marketValue}
+                            min="10"
+                            step="10"
+                            placeholder="0"
+                            defaultValue={Math.round(marketValue / 1000)}
                             id={`transfer-${player.id}`}
                             className="form-input"
                           />
                           <div className="form-hint">
                             Market value: £{(marketValue / 1000).toFixed(0)}k | 
-                            Price too high and you won't get offers
+                            Enter in thousands (e.g., 150 = £150,000)
                           </div>
                         </div>
                         <div className="button-group">
                           <button
                             onClick={() => {
                               const priceInput = document.getElementById(`transfer-${player.id}`);
-                              const askingPrice = parseInt(priceInput.value) || marketValue;
+                              const priceInThousands = parseInt(priceInput.value) || 0;
+                              const askingPrice = priceInThousands * 1000;
                               const result = listPlayerForTransfer(player, askingPrice);
                               setTransferMessage({
                                 ...result,
@@ -2619,7 +2655,10 @@ return (
         {/* NEW: Transfer Window Button */}
         {gameState.isTransferWindow && gameState.seasonPhase === 'regular' && (
           <button
-            onClick={() => setView('transfers')}
+            onClick={() => {
+              setGameState(prev => ({ ...prev, paused: true })); // Pause the season
+              setView('transfers');
+            }}
             className="btn btn-warning btn-bold btn-pulse"
           >
             <DollarSign size={20} />
@@ -2700,6 +2739,7 @@ return (
               </div>
             </div>
           )}
+
           
           <div className="season-finances">
             <div className="finance-box">
@@ -2731,24 +2771,26 @@ return (
               <div className="finance-label">Net Income</div>
             </div>
           </div>
-          
-          {/* Add resign button at the bottom */}
-            <div className="season-actions">
-              <button
-                onClick={() => {
-                  if (window.confirm('Are you sure you want to resign? This will end your career and return to the main menu.')) {
-                    deleteSave();
-                    setGameState(null);
-                    setView('start');
-                    setTeamNameInput('');
-                  }
-                }}
-                className="btn btn-danger"
-              >
-                Resign & Start Over
-              </button>
+
+          {/* Add retirements section */}
+          {gameState.lastSeasonFinish.retirees && gameState.lastSeasonFinish.retirees.length > 0 && (
+            <div className="retirements-section">
+              <h3 className="section-title">Player Retirements</h3>
+              <p className="retirements-intro">The following players have retired from professional football:</p>
+              <div className="retirements-list">
+                {gameState.lastSeasonFinish.retirees.map((retiree, idx) => (
+                  <div key={idx} className="retirement-item">
+                    <span className="retirement-name">{retiree.name}</span>
+                    <span className="badge badge-position">{retiree.position}</span>
+                    <span className={`player-rating rating-${retiree.rating >= 70 ? 'high' : retiree.rating >= 60 ? 'medium' : 'low'}`}>
+                      {retiree.rating} OVR
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
+        </div>
       )}
 
       <div className="main-grid">
