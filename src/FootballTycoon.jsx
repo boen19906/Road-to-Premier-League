@@ -519,8 +519,9 @@ function simulateMatch(homeTeam, awayTeam, isPlayerHome) {
   if (homeTeam === gameState.teamName || awayTeam === gameState.teamName) {
     const isPlayerTeam = homeTeam === gameState.teamName;
     const playerGoals = isPlayerTeam ? homeGoals : awayGoals;
+    const opponentGoals = isPlayerTeam ? awayGoals : homeGoals;
     
-    updatePlayerMatchStats(playerGoals);
+    updatePlayerMatchStats(playerGoals, opponentGoals);
   }
   
   return {
@@ -532,8 +533,9 @@ function simulateMatch(homeTeam, awayTeam, isPlayerHome) {
   };
 }
 
-function updatePlayerMatchStats(goalsScored) {
+function updatePlayerMatchStats(goalsScored, goalsAgainst) {
   setGameState(prev => {
+
     // Get starters using the same formation logic as team rating
     const gks = prev.squad.filter(p => p.position === 'GK').sort((a, b) => b.rating - a.rating);
     const defs = prev.squad.filter(p => p.position === 'DEF').sort((a, b) => b.rating - a.rating);
@@ -589,8 +591,13 @@ function updatePlayerMatchStats(goalsScored) {
     
     const starters = bestFormation.starters;
     const starterIds = new Set(starters.map(p => p.id));
+
+    // Determine match result
+    const won = goalsScored > goalsAgainst;
+    const lost = goalsScored < goalsAgainst;
+    const drew = goalsScored === goalsAgainst;
+    
     // Track goals assigned to ensure we match the match score
-    let goalsAssigned = 0;
     const goalScorers = [];
     
     // First pass: determine who scored
@@ -636,11 +643,45 @@ function updatePlayerMatchStats(goalsScored) {
     let updatedSquad = prev.squad.map(player => {
       const isStarter = starterIds.has(player.id);
       
-      // Starters play 95% of games, bench players 30%
-      const playChance = isStarter ? 0.95 : 0.3;
+      // Goalkeepers: starting GK plays 98% of games, backup almost never
+      // Other positions: starters 95%, bench 30%
+      let playChance;
+      if (player.position === 'GK') {
+        playChance = isStarter ? 0.98 : 0.02;
+      } else {
+        playChance = isStarter ? 0.95 : 0.30;
+      }
+      
       const isPlaying = Math.random() < playChance;
       
-      if (!isPlaying) return player;
+      if (!isPlaying) {
+        // Didn't play - morale impact
+        let moraleChange = 0;
+        
+        if (!isStarter) {
+          // Bench players lose morale, but with diminishing effect
+          const currentMorale = player.morale;
+          
+          if (currentMorale > 60) {
+            moraleChange = -1; // Normal drop when morale is decent
+          } else if (currentMorale > 45) {
+            moraleChange = -0.5; // Slower drop when getting low
+          } else if (currentMorale > 30) {
+            moraleChange = -0.3; // Very slow drop when already low
+          } else {
+            moraleChange = 0; // Stop dropping below 30
+          }
+          
+          // Small random variation
+          moraleChange += (Math.random() - 0.5) * 0.3;
+        }
+        // Starters who don't play (rested/injured) - no morale change
+        
+        return {
+          ...player,
+          morale: Math.round(Math.max(30, Math.min(100, player.morale + moraleChange))) // Add Math.round here
+        };
+      }
       
       const newStats = { ...player.seasonStats, appearances: player.seasonStats.appearances + 1 };
       
@@ -653,7 +694,59 @@ function updatePlayerMatchStats(goalsScored) {
       if (Math.random() < cardChance) newStats.yellowCards++;
       if (Math.random() < 0.008) newStats.redCards++;
       
-      return { ...player, seasonStats: newStats };
+      // Calculate morale change based on individual + team performance
+      let moraleChange = 0;
+      const currentMorale = player.morale;
+
+      // Team result impact (smaller changes)
+      if (won) moraleChange += 2;
+      else if (drew) moraleChange += 0;
+      else if (lost) moraleChange -= 2;
+
+      // Individual performance bonuses (reduced)
+      if (goalsThisMatch > 0) {
+        moraleChange += goalsThisMatch * 2; // +2 per goal
+      }
+
+      // Playing time bonus (before diminishing returns)
+      if (isStarter) {
+        // Starters get small boost, but diminishing at high morale
+        if (currentMorale < 70) {
+          moraleChange += 0.5;
+        } else {
+          moraleChange += 0.2; // Less boost when already happy
+        }
+      } else {
+        // Bench players who DO get to play get morale boost
+        if (currentMorale < 50) {
+          moraleChange += 1; // Big boost when morale is low
+        } else if (currentMorale < 65) {
+          moraleChange += 0.5; // Moderate boost
+        }
+      }
+
+      // Small randomness
+      moraleChange += Math.floor(Math.random() * 3) - 1; // -1 to +1
+
+      // Apply diminishing returns - harder to improve when morale is high
+      if (moraleChange > 0) {
+        if (currentMorale >= 85) {
+          moraleChange *= 0.3; // Very hard to improve above 85
+        } else if (currentMorale >= 75) {
+          moraleChange *= 0.5; // Harder to improve above 75
+        } else if (currentMorale >= 65) {
+          moraleChange *= 0.7; // Slightly harder above 65
+        }
+      }
+
+      // Apply the change
+      const newMorale = Math.max(30, Math.min(100, player.morale + moraleChange));
+      
+      return { 
+        ...player, 
+        seasonStats: newStats,
+        morale: Math.round(newMorale)
+      };
     });
 
     // NOW assign assists - one assist per goal (with some unassisted)
@@ -1107,30 +1200,44 @@ function startNewSeason() {
     // Update stats proportionally to rating change
     const statChange = ratingChange;
     const newStats = {
-      pace: Math.max(30, Math.min(99, player.stats.pace + statChange)),
-      shooting: Math.max(30, Math.min(99, player.stats.shooting + statChange)),
-      passing: Math.max(30, Math.min(99, player.stats.passing + statChange)),
-      defending: Math.max(30, Math.min(99, player.stats.defending + statChange)),
-      physical: Math.max(30, Math.min(99, player.stats.physical + (newAge > 30 ? statChange - 1 : statChange)))
-    };
-    
-    return {
-      ...player,
-      age: newAge,
-      rating: newRating,
-      stats: newStats,
-      contractYears: negotiation?.status === 'accepted' ? negotiation.offer.years : player.contractYears - 1,
-      salary: negotiation?.status === 'accepted' ? negotiation.offer.salary : player.salary,
-      seasonStats: {
-        appearances: 0,
-        goals: 0,
-        assists: 0,
-        yellowCards: 0,
-        redCards: 0
-      },
-      transferOffers: [], // Reset transfer offers
-      isTransferWindow: false // Close transfer window
-    };
+        pace: Math.max(30, Math.min(99, player.stats.pace + statChange)),
+        shooting: Math.max(30, Math.min(99, player.stats.shooting + statChange)),
+        passing: Math.max(30, Math.min(99, player.stats.passing + statChange)),
+        defending: Math.max(30, Math.min(99, player.stats.defending + statChange)),
+        physical: Math.max(30, Math.min(99, player.stats.physical + (newAge > 30 ? statChange - 1 : statChange)))
+      };
+      
+      // Morale regression towards neutral (60) at start of new season
+      const currentMorale = player.morale;
+      let newMorale;
+      if (currentMorale > 65) {
+        // High morale drifts down slightly (resets by 10-20%)
+        newMorale = currentMorale - (5 + Math.floor(Math.random() * 10));
+      } else if (currentMorale < 55) {
+        // Low morale recovers slightly (fresh start)
+        newMorale = currentMorale + (5 + Math.floor(Math.random() * 10));
+      } else {
+        // Moderate morale stays relatively stable
+        newMorale = currentMorale + (Math.floor(Math.random() * 5) - 2);
+      }
+      newMorale = Math.max(40, Math.min(85, newMorale)); // Keep in 40-85 range
+      
+      return {
+        ...player,
+        age: newAge,
+        rating: newRating,
+        stats: newStats,
+        morale: newMorale, // Add this
+        contractYears: negotiation?.status === 'accepted' ? negotiation.offer.years : player.contractYears - 1,
+        salary: negotiation?.status === 'accepted' ? negotiation.offer.salary : player.salary,
+        seasonStats: {
+          appearances: 0,
+          goals: 0,
+          assists: 0,
+          yellowCards: 0,
+          redCards: 0
+        }
+      };
   });
 
    // Generate new standings with realistic promotion/relegation
@@ -1423,6 +1530,7 @@ function offerContract(player, years, salary) {
         contractYears: years, 
         salary, 
         id: Date.now() + Math.random(),
+        morale: 60 + Math.floor(Math.random() * 25), // 60-85 morale for new signings
         seasonStats: {
           appearances: 0,
           goals: 0,
@@ -2909,7 +3017,8 @@ return (
                           </div>
                           <div className="squad-player-details">
                             Age: {player.age} | Contract: {player.contractYears}yr | 
-                            £{(player.salary / 1000).toFixed(0)}k/yr
+                            £{(player.salary / 1000).toFixed(0)}k/yr | 
+                            Morale: {player.morale}
                           </div>
                         </div>
                         <button
@@ -3012,6 +3121,25 @@ return (
                 <div 
                   className="progress-fill progress-fill-warning"
                   style={{ width: `${gameState.reputation}%` }}
+                />
+              </div>
+
+              <div className="stat-row">
+                <span>Team Morale:</span>
+                <span className="text-bold">
+                  {gameState.squad.length > 0 
+                    ? Math.round(gameState.squad.reduce((sum, p) => sum + p.morale, 0) / gameState.squad.length)
+                    : 50}/100
+                </span>
+              </div>
+              <div className="progress-bar">
+                <div 
+                  className="progress-fill progress-fill-success"
+                  style={{ 
+                    width: `${gameState.squad.length > 0 
+                      ? gameState.squad.reduce((sum, p) => sum + p.morale, 0) / gameState.squad.length 
+                      : 50}%` 
+                  }}
                 />
               </div>
               
