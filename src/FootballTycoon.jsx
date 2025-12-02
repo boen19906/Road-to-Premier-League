@@ -5208,7 +5208,7 @@ return (
           className="btn btn-primary btn-bold"
         >
           <UserPlus size={20} />
-          Free Agents
+          Transfers (Buy Players)
         </button>
         
         <button
