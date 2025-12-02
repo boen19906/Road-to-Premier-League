@@ -2649,7 +2649,7 @@ function endSeason() {
   // Add promotion bonus - scaled to cover facility upgrades plus operating cushion
   let promotionBonus = 0;
   if (promoted) {
-    if (gameState.league === 5) promotionBonus = 4000000;      // £4M (was £2M) - covers L2 facilities + buffer
+    if (gameState.league === 5) promotionBonus = 5000000;      // £5M (was £2M) - covers L2 facilities + buffer
     else if (gameState.league === 4) promotionBonus = 12000000;  // £12M (was £8M) - covers L1 facilities + buffer
     else if (gameState.league === 3) promotionBonus = 25000000;  // £25M (was £15M) - covers Championship facilities + buffer
     else if (gameState.league === 2) promotionBonus = 50000000;  // £50M (was £30M) - covers PL facilities + buffer
@@ -3026,7 +3026,7 @@ const newStandings = generateStandingsFromMembership(newLeague, gameState.teamNa
     console.log('Standings:', newStandings.map(s => s.team));
   }
 
-  const newFreeAgents = generateFreeAgents(newLeague, gameState.reputation, 30);
+  const newFreeAgents = generateFreeAgentsByPhase(newLeague, gameState.reputation, 'offseason');
 
   setGameState(prev => ({
     ...prev,
@@ -3160,118 +3160,192 @@ function calculateMarketValue(player, league) {
 
 function calculateTransferFee(player, league) {
   const rating = player.rating;
-  
-  // Transfer fee based purely on rating (like salary, but different scale)
-  // Transfer fees are typically much higher than annual salaries
-  
   let baseTransferFee;
   
-  // Define key transfer fee points for exponential curve
-  // These are BASE values - can go higher with age/performance bonuses
-  const transferFeePoints = [
-    { rating: 45, fee: 5000 },          // Minimum
-    { rating: 55, fee: 12000 },         // Low National League (up to 50k with bonuses)
-    { rating: 60, fee: 35000 },         // Average National League (up to 120k)
-    { rating: 65, fee: 80000 },         // Good National League (up to 300k)
-    { rating: 68, fee: 140000 },        // National League star (up to 500k)
-    { rating: 70, fee: 220000 },        // League Two star (up to 700k)
-    { rating: 75, fee: 500000 },        // League One star (up to 1.5M)
-    { rating: 80, fee: 1800000 },       // Championship star (up to 8M)
-    { rating: 85, fee: 8000000 },       // Premier League regular (up to 30M)
-    { rating: 88, fee: 18000000 },      // Premier League star (up to 70M)
-    { rating: 92, fee: 45000000 },      // World class (up to 150M)
-    { rating: 95, fee: 75000000 },      // Elite (up to 200M)
-    { rating: 99, fee: 120000000 }      // Absolute best (up to 250M with all bonuses)
-  ];
-  
-  // Find the two points to interpolate between
-  let lowerPoint = transferFeePoints[0];
-  let upperPoint = transferFeePoints[transferFeePoints.length - 1];
-  
-  for (let i = 0; i < transferFeePoints.length - 1; i++) {
-    if (rating >= transferFeePoints[i].rating && rating <= transferFeePoints[i + 1].rating) {
-      lowerPoint = transferFeePoints[i];
-      upperPoint = transferFeePoints[i + 1];
-      break;
-    }
+  switch(league) {
+    case 5: // National League: MOSTLY FREE, tiny fees up to £50k typical, £100-250k RARE
+      
+      if (rating <= 58) {
+        return 0; // Free transfer
+      }
+      
+      // 59-62: Almost all free or nominal (£0-£10k)
+      if (rating <= 62) {
+        if (Math.random() < 0.80) return 0; // 80% are free
+        return Math.floor(Math.random() * 10000); // £0-10k
+      }
+      
+      // 63-64: Mostly free or small fees (£0-£30k)
+      if (rating <= 64) {
+        if (Math.random() < 0.60) return 0; // 60% still free
+        return Math.floor(5000 + Math.random() * 25000); // £5k-30k
+      }
+      
+      // 65: Best players, can be £30k-£100k, VERY RARE £100k-£250k outlier
+      let nlFee = 30000 + Math.random() * 70000; // £30k-100k
+      
+      // Only 5% chance of being a true outlier (Vardy-type)
+      if (Math.random() < 0.05) {
+        nlFee = 100000 + Math.random() * 150000; // £100k-250k
+      }
+      
+      // Young player bonus (modest)
+      if (player.age <= 21) nlFee *= 1.2;
+      
+      return Math.floor(Math.min(250000, nlFee)); // Hard cap at £250k
+      
+    case 4: // League Two: Free - £1.5M (most are free or very low fees)
+      
+      if (rating <= 60) {
+        if (Math.random() < 0.70) return 0; // 70% free
+        return Math.floor(Math.random() * 50000); // £0-50k
+      }
+      
+      // Base fees WITHOUT heavy modifiers
+      if (rating >= 67) {
+        // Top tier (67-68): £400k - £800k base
+        baseTransferFee = 400000 + ((rating - 67) / 1) * 400000;
+      } else if (rating >= 65) {
+        // Upper-mid (65-66): £150k - £400k
+        baseTransferFee = 150000 + ((rating - 65) / 2) * 250000;
+      } else if (rating >= 63) {
+        // Mid tier (63-64): £60k - £150k
+        baseTransferFee = 60000 + ((rating - 63) / 2) * 90000;
+      } else {
+        // Low tier (61-62): £20k - £60k
+        baseTransferFee = 20000 + ((rating - 61) / 2) * 40000;
+      }
+      
+      // LIGHT modifiers only
+      if (player.age <= 21) {
+        baseTransferFee *= 1.3; // Young prospect
+      } else if (player.age >= 30) {
+        baseTransferFee *= 0.75; // Older player discount
+      }
+      
+      if (player.position === 'FWD' && rating >= 65) {
+        baseTransferFee *= 1.15; // Goal scorers worth more
+      }
+      
+      // Small random variation (±20%)
+      baseTransferFee *= (0.80 + Math.random() * 0.40);
+      
+      return Math.floor(Math.max(0, Math.min(1500000, baseTransferFee)));
+      
+    case 3: // League One: £50k - £3M
+      
+      // Low-rated players (under 64) have chance of being cheap
+      if (rating < 64 && Math.random() < 0.30) {
+        return Math.floor(50000 + Math.random() * 100000); // £50k-150k
+      }
+      
+      // Base fees
+      if (rating >= 72) {
+        // Top tier (72-74): £1.5M - £2.5M base
+        baseTransferFee = 1500000 + ((rating - 72) / 2) * 1000000;
+      } else if (rating >= 68) {
+        // Upper-mid (68-71): £600k - £1.5M
+        baseTransferFee = 600000 + ((rating - 68) / 4) * 900000;
+      } else if (rating >= 65) {
+        // Mid tier (65-67): £200k - £600k
+        baseTransferFee = 200000 + ((rating - 65) / 3) * 400000;
+      } else {
+        // Low tier (62-64): £50k - £200k
+        baseTransferFee = 50000 + ((rating - 62) / 3) * 150000;
+      }
+      
+      // Moderate modifiers
+      if (player.age <= 21) {
+        baseTransferFee *= 1.4;
+      } else if (player.age <= 24) {
+        baseTransferFee *= 1.2;
+      } else if (player.age >= 30) {
+        baseTransferFee *= 0.75;
+      }
+      
+      if (player.position === 'FWD') baseTransferFee *= 1.15;
+      else if (player.position === 'MID') baseTransferFee *= 1.1;
+      
+      baseTransferFee *= (0.80 + Math.random() * 0.40);
+      
+      return Math.floor(Math.max(50000, Math.min(3000000, baseTransferFee)));
+      
+    case 2: // Championship: £250k - £15M
+      
+      // Base fees
+      if (rating >= 80) {
+        // Elite (80-82): £8M - £12M base
+        baseTransferFee = 8000000 + ((rating - 80) / 2) * 4000000;
+      } else if (rating >= 76) {
+        // Very good (76-79): £3M - £8M
+        baseTransferFee = 3000000 + ((rating - 76) / 4) * 5000000;
+      } else if (rating >= 73) {
+        // Good (73-75): £1M - £3M
+        baseTransferFee = 1000000 + ((rating - 73) / 3) * 2000000;
+      } else {
+        // Decent (70-72): £250k - £1M
+        baseTransferFee = 250000 + ((rating - 70) / 3) * 750000;
+      }
+      
+      // Standard modifiers
+      if (player.age <= 21) {
+        baseTransferFee *= 1.6;
+      } else if (player.age <= 24) {
+        baseTransferFee *= 1.3;
+      } else if (player.age <= 27) {
+        baseTransferFee *= 1.1;
+      } else if (player.age >= 30) {
+        baseTransferFee *= 0.7;
+      }
+      
+      if (player.position === 'FWD') baseTransferFee *= 1.2;
+      else if (player.position === 'MID') baseTransferFee *= 1.1;
+      else if (player.position === 'GK') baseTransferFee *= 0.9;
+      
+      baseTransferFee *= (0.80 + Math.random() * 0.40);
+      
+      return Math.floor(Math.max(250000, Math.min(15000000, baseTransferFee)));
+      
+    case 1: // Premier League: £5M - £150M+
+      
+      // Base fees
+      if (rating >= 90) {
+        // World class (90-95): £60M - £120M base
+        baseTransferFee = 60000000 + ((rating - 90) / 5) * 60000000;
+      } else if (rating >= 85) {
+        // Elite (85-89): £25M - £60M
+        baseTransferFee = 25000000 + ((rating - 85) / 5) * 35000000;
+      } else if (rating >= 80) {
+        // Very good (80-84): £10M - £25M
+        baseTransferFee = 10000000 + ((rating - 80) / 5) * 15000000;
+      } else {
+        // Good (75-79): £5M - £10M
+        baseTransferFee = 5000000 + ((rating - 75) / 5) * 5000000;
+      }
+      
+      // Full modifiers
+      if (player.age <= 21) {
+        baseTransferFee *= 1.7;
+      } else if (player.age <= 24) {
+        baseTransferFee *= 1.4;
+      } else if (player.age <= 27) {
+        baseTransferFee *= 1.15;
+      } else if (player.age >= 30) {
+        baseTransferFee *= 0.65;
+      }
+      
+      if (player.position === 'FWD') baseTransferFee *= 1.2;
+      else if (player.position === 'MID') baseTransferFee *= 1.1;
+      else if (player.position === 'GK') baseTransferFee *= 0.85;
+      
+      baseTransferFee *= (0.80 + Math.random() * 0.40);
+      
+      return Math.floor(Math.max(5000000, Math.min(150000000, baseTransferFee)));
+      
+    default:
+      return 0;
   }
-  
-  // Exponential interpolation between points
-  const ratingRange = upperPoint.rating - lowerPoint.rating;
-  const normalizedRating = (rating - lowerPoint.rating) / ratingRange;
-  
-  // Exponential growth
-  const feeRatio = upperPoint.fee / lowerPoint.fee;
-  const growthFactor = Math.pow(feeRatio, normalizedRating);
-  baseTransferFee = lowerPoint.fee * growthFactor;
-  
-  // Age factor - younger players command MUCH higher fees (potential value)
-  let ageMultiplier = 1.0;
-  if (player.age <= 21) {
-    ageMultiplier = 1.8; // Young prospects worth significantly more
-  } else if (player.age <= 24) {
-    ageMultiplier = 1.5; // Developing players premium
-  } else if (player.age <= 27) {
-    ageMultiplier = 1.2; // Prime years
-  } else if (player.age >= 30) {
-    ageMultiplier = 0.6; // Declining value
-  } else if (player.age >= 33) {
-    ageMultiplier = 0.35; // Very low value for old players
-  }
-  
-  baseTransferFee *= ageMultiplier;
-  
-  // Performance bonuses - proven performers cost more
-  if (player.seasonStats && player.seasonStats.appearances > 0) {
-    const goalsPerGame = player.seasonStats.goals / player.seasonStats.appearances;
-    const assistsPerGame = player.seasonStats.assists / player.seasonStats.appearances;
-    
-    if (player.position === 'FWD') {
-      if (goalsPerGame > 0.5) baseTransferFee *= 1.6; // Prolific scorer
-      else if (goalsPerGame > 0.3) baseTransferFee *= 1.3; // Good scorer
-    } else if (player.position === 'MID') {
-      const contributions = goalsPerGame + assistsPerGame;
-      if (contributions > 0.4) baseTransferFee *= 1.5; // Excellent playmaker
-      else if (contributions > 0.25) baseTransferFee *= 1.25; // Good contributor
-    }
-    
-    // Regular starter bonus
-    if (player.seasonStats.appearances > 30) {
-      baseTransferFee *= 1.3;
-    } else if (player.seasonStats.appearances > 20) {
-      baseTransferFee *= 1.15;
-    }
-  }
-  
-  // Position premium - attackers command higher fees
-  if (player.position === 'FWD') {
-    baseTransferFee *= 1.25;
-  } else if (player.position === 'MID') {
-    baseTransferFee *= 1.15;
-  } else if (player.position === 'GK') {
-    baseTransferFee *= 0.85; // GKs cheaper in transfer market
-  }
-  
-  // Contract length factor - players with longer contracts cost more
-  if (player.contractYears) {
-    if (player.contractYears >= 4) {
-      baseTransferFee *= 1.3; // Long contract = higher fee
-    } else if (player.contractYears >= 3) {
-      baseTransferFee *= 1.2;
-    } else if (player.contractYears >= 2) {
-      baseTransferFee *= 1.1;
-    } else if (player.contractYears === 1) {
-      baseTransferFee *= 0.7; // Expiring contract = cheaper
-    }
-  }
-  
-  // Random variation (±20% to simulate market conditions)
-  const randomFactor = 0.80 + Math.random() * 0.40;
-  baseTransferFee *= randomFactor;
-  
-  return Math.floor(baseTransferFee);
 }
-
 function negotiateContract(player, offer) {
   const yearlyOffer = offer.salary;
   
@@ -5249,7 +5323,7 @@ return (
                 )}
                 {gameState.lastSeasonFinish.promotionBonus > 0 && (
                   <div className="finance-row text-success">
-                    <span>🎉 Promotion Bonus:</span>
+                    <span>🎉 Board Promotion Bonus:</span>
                     <span>£{(gameState.lastSeasonFinish.promotionBonus / 1000000).toFixed(2)}M</span>
                   </div>
                 )}
