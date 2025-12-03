@@ -101,7 +101,7 @@ const LEAGUES = {
 const FACILITIES = [
   { name: 'Training Ground', level: 0, maxLevel: 5, baseCost: 500000, performanceBonus: 0, attendanceBonus: 0, maintenanceCost: 30000 },
   { name: 'Stadium', level: 0, maxLevel: 5, baseCost: 0, performanceBonus: 0, attendanceBonus: 5, maintenanceCost: 150000 },
-  { name: 'Youth Academy', level: 0, maxLevel: 5, baseCost: 400000, performanceBonus: 0, attendanceBonus: 0, maintenanceCost: 25000 },
+  { name: 'Youth Academy', level: 0, maxLevel: 5, baseCost: 400000, performanceBonus: 0, attendanceBonus: 0, maintenanceCost: 100000 }, // Changed maintenanceCost
   { name: 'Medical Center', level: 0, maxLevel: 5, baseCost: 400000, performanceBonus: 0, attendanceBonus: 0, maintenanceCost: 20000 }
 ];
 
@@ -3895,10 +3895,10 @@ function calculateFacilityImpact(facilities, league) {
   const requiredLevel = getRequiredFacilityLevel(league);
   let totalImpact = 0;
   
-  // Check each non-stadium facility
-  const nonStadiumFacilities = facilities.filter(f => f.name !== 'Stadium');
+  // Check each non-stadium AND non-academy facility
+  const impactFacilities = facilities.filter(f => f.name !== 'Stadium' && f.name !== 'Youth Academy');
   
-  nonStadiumFacilities.forEach(facility => {
+  impactFacilities.forEach(facility => {
     if (facility.level < requiredLevel) {
       // PENALTY for inadequate facilities
       const deficit = requiredLevel - facility.level;
