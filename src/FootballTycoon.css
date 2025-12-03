@@ -999,11 +999,15 @@
   }
   
   .text-success {
-    color: #4ade80;
+    color: #22c55e;
+    font-weight: 600;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
   }
   
   .text-danger {
-    color: #f87171;
+    color: #ef4444;
+    font-weight: 600;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
   }
   
   .text-warning {
@@ -1166,6 +1170,8 @@
     border-radius: 0.5rem;
     padding: 1.5rem;
     max-width: 600px;
+    margin: 0 auto;
+    text-align: center;
   }
   
   .start-info-title {
@@ -1173,24 +1179,31 @@
     font-weight: bold;
     margin-bottom: 1rem;
   }
-  
-  .start-info-list {
-    text-align: left;
-    list-style: none;
-    padding: 0;
-  }
-  
-  .start-info-list li {
-    padding: 0.5rem 0;
-    padding-left: 1.5rem;
-    position: relative;
-  }
-  
-  .start-info-list li::before {
-    content: "⚽";
-    position: absolute;
-    left: 0;
-  }
+
+.start-info-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 auto;
+  text-align: center;
+  display: inline-block;
+}
+
+.start-info-list li {
+  padding: 0.75rem 0;
+  padding-left: 2rem;
+  position: relative;
+  color: #d1d5db;
+  font-size: 1.05rem;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.start-info-list li::before {
+  content: "⚽";
+  position: absolute;
+  left: 0;
+  font-size: 1.2rem;
+}
   
   /* Game Over Screen */
   .gameover-screen {

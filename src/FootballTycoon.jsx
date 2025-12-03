@@ -587,7 +587,7 @@ function generateStandingsFromMembership(league, playerTeam, leagueMembership, t
   
   console.log(`Final team count for league ${league}:`, finalTeams.length);
   
-  return finalTeams.map((team, index) => {
+  const standings = finalTeams.map((team, index) => {
     // Use stored rating from teamRatings object, or calculate for player
     const teamRating = team === playerTeam ? 0 : (teamRatings[team] || 60);
     
@@ -606,6 +606,21 @@ function generateStandingsFromMembership(league, playerTeam, leagueMembership, t
       rating: teamRating
     };
   });
+  
+  // Sort by rating (highest first), but keep isPlayer flag intact
+  standings.sort((a, b) => {
+    // Player team always goes first (or last if you prefer)
+    if (a.isPlayer) return -1;
+    if (b.isPlayer) return 1;
+    return b.rating - a.rating;
+  });
+  
+  // Update positions after sort
+  standings.forEach((team, index) => {
+    team.position = index + 1;
+  });
+  
+  return standings;
 }
 
 function updateAllTeamRatings(teamRatings) {
@@ -1451,75 +1466,45 @@ console.log('Final verification after balancing:', {
 }
 
 
-function generateStandings(league, playerTeam) {
+function generateStandingsFromMembership(league, playerTeam, leagueMembership, teamRatings, playerTeamRating) {
   const leagueData = LEAGUES[league];
-  const teams = [playerTeam, ...TEAM_NAMES[league].slice(0, leagueData.teams - 1)];
+  const teamsInLeague = leagueMembership[league] || [];
   
-  return teams.map((team, index) => {
-    // League-specific rating ranges
-    let minRating, maxRating;
+  console.log(`Generating standings for league ${league}:`, {
+    expectedTeams: leagueData.teams,
+    actualTeams: teamsInLeague.length,
+    teams: teamsInLeague
+  });
+  
+  // Ensure we have exactly the right number of teams
+  let finalTeams = [...teamsInLeague];
+  
+  // Remove player team if it's in the list
+  finalTeams = finalTeams.filter(t => t !== playerTeam);
+  
+  // Add player team
+  finalTeams.push(playerTeam);
+  
+  // Trim to exact size needed
+  finalTeams = finalTeams.slice(0, leagueData.teams);
+  
+  // If still not enough teams, add from pool
+  if (finalTeams.length < leagueData.teams) {
+    console.warn(`League ${league} short ${leagueData.teams - finalTeams.length} teams, adding from pool`);
+    const availableTeams = TEAM_NAMES[league].filter(t => 
+      !finalTeams.includes(t) && t !== playerTeam
+    );
     
-    switch(league) { // Changed from newLeague to league
-      case 5: minRating = 50; maxRating = 66; break;
-      case 4: minRating = 58; maxRating = 71; break;
-      case 3: minRating = 64; maxRating = 76; break;
-      case 2: minRating = 73; maxRating = 85; break; // +3 to both (was 70-82)
-      case 1: minRating = 80; maxRating = 95; break;
-      default: minRating = 50; maxRating = 66;
-    }
-    
-    // Create more realistic distribution
-    // Top teams are much better, bottom teams closer to relegation zone
-    const positionInLeague = index; // 0 = first in list, not necessarily best
-    const totalTeams = leagueData.teams;
-    
-    // Use a curve so top teams are better and there's more spread
-    // This creates a realistic distribution where top 6 are significantly better
-    let teamRating;
-    
-    if (team === playerTeam) {
-      // Player team starts in middle of the pack
-      teamRating = Math.round((minRating + maxRating) / 2);
-    } else {
-      // Big 6 Premier League teams should always be elite
-      const bigSix = [
-        'Manchester City',
-        'Arsenal FC',
-        'Liverpool FC',
-        'Chelsea FC',
-        'Manchester United',
-        'Tottenham Hotspur'
-      ];
-      
-      if (league === 1 && bigSix.includes(team)) {
-        // Big 6 are always 90-95 rated
-        teamRating = 90 + Math.floor(Math.random() * 6);
-      } else {
-        // Create realistic spread with better teams at top
-        const positionFactor = positionInLeague / (totalTeams - 1); // 0 to 1
-        
-        // Use exponential curve for Premier League to create "Big 6" effect
-        if (league === 1 && positionInLeague < 6) {
-          // Top 6 teams are 88-95 rated
-          teamRating = Math.round(95 - (positionInLeague * 1.0));
-        } else if (league === 1) {
-          // Rest of PL: 80-89
-          const restMinRating = 80;
-          const restMaxRating = 89;
-          const adjustedPosition = (positionInLeague - 6) / (totalTeams - 7);
-          teamRating = Math.round(restMaxRating - (adjustedPosition * (restMaxRating - restMinRating)));
-        } else {
-          // Other leagues: more linear but with variance
-          const range = maxRating - minRating;
-          const baseForPosition = maxRating - (positionFactor * range);
-          const variance = range * 0.15; // ±15% variance
-          teamRating = Math.round(baseForPosition + (Math.random() - 0.5) * variance);
-        }
-        
-        // Clamp to min/max
-        teamRating = Math.max(minRating, Math.min(maxRating, teamRating));
-      }
-    }
+    const needed = leagueData.teams - finalTeams.length;
+    const newTeams = availableTeams.slice(0, needed);
+    finalTeams.push(...newTeams);
+  }
+  
+  console.log(`Final team count for league ${league}:`, finalTeams.length);
+  
+  const standings = finalTeams.map((team, index) => {
+    // Use player's actual rating or stored rating from teamRatings object
+    const teamRating = team === playerTeam ? playerTeamRating : (teamRatings[team] || 60);
     
     return {
       team,
@@ -1533,9 +1518,24 @@ function generateStandings(league, playerTeam) {
       points: 0,
       position: index + 1,
       isPlayer: team === playerTeam,
-      rating: team === playerTeam ? 0 : teamRating
+      rating: teamRating
     };
   });
+  
+  // Sort by rating (highest first), but keep isPlayer flag intact
+  standings.sort((a, b) => {
+    // Player team always goes first
+    if (a.isPlayer) return -1;
+    if (b.isPlayer) return 1;
+    return b.rating - a.rating;
+  });
+  
+  // Update positions after sort
+  standings.forEach((team, index) => {
+    team.position = index + 1;
+  });
+  
+  return standings;
 }
 
 function calculateTeamRating(squad) {
@@ -2357,6 +2357,18 @@ function endSeason() {
   } else if (playerStanding.position >= 21) {
     relegated = true;
     message = `📉 Relegated from ${leagueData.name}. Finished ${playerStanding.position}${getOrdinal(playerStanding.position)}.`;
+    deleteSave();
+    setGameOverReason({
+      reason: 'relegated',
+      finalBalance: gameState.money,
+      debt: 0,
+      season: gameState.season,
+      league: leagueData.name,
+      position: playerStanding.position
+    });
+    setView('gameover');
+    return;
+
   } else {
     message = `Finished ${playerStanding.position}${getOrdinal(playerStanding.position)} in ${leagueData.name}.`;
   }
@@ -2687,7 +2699,7 @@ function endSeason() {
     });
     setView('gameover');
     return;
-  } else if (consecutiveDebtSeasons >= 2) {
+  } else if (consecutiveDebtSeasons >= 3) {
     deleteSave();
     setGameOverReason({
       reason: 'fired',
@@ -3015,8 +3027,8 @@ if (gameState.lastSeasonFinish && gameState.standings) {
   updatedRatings = result.ratings; // Update the variable declared above
 }
 
-// Generate standings from updated membership
-const newStandings = generateStandingsFromMembership(newLeague, gameState.teamName, updatedMembership, updatedRatings);
+const playerRating = calculateTeamRating(updatedSquad);
+const newStandings = generateStandingsFromMembership(newLeague, gameState.teamName, updatedMembership, updatedRatings, playerRating);
 
   // CRITICAL: Verify team count matches league requirements
   const expectedTeamCount = LEAGUES[newLeague].teams;
@@ -3162,190 +3174,113 @@ function calculateTransferFee(player, league) {
   const rating = player.rating;
   let baseTransferFee;
   
-  switch(league) {
-    case 5: // National League: MOSTLY FREE, tiny fees up to £50k typical, £100-250k RARE
-      
-      if (rating <= 58) {
-        return 0; // Free transfer
-      }
-      
-      // 59-62: Almost all free or nominal (£0-£10k)
-      if (rating <= 62) {
-        if (Math.random() < 0.80) return 0; // 80% are free
-        return Math.floor(Math.random() * 10000); // £0-10k
-      }
-      
-      // 63-64: Mostly free or small fees (£0-£30k)
-      if (rating <= 64) {
-        if (Math.random() < 0.60) return 0; // 60% still free
-        return Math.floor(5000 + Math.random() * 25000); // £5k-30k
-      }
-      
-      // 65: Best players, can be £30k-£100k, VERY RARE £100k-£250k outlier
-      let nlFee = 30000 + Math.random() * 70000; // £30k-100k
-      
-      // Only 5% chance of being a true outlier (Vardy-type)
-      if (Math.random() < 0.05) {
-        nlFee = 100000 + Math.random() * 150000; // £100k-250k
-      }
-      
-      // Young player bonus (modest)
-      if (player.age <= 21) nlFee *= 1.2;
-      
-      return Math.floor(Math.min(250000, nlFee)); // Hard cap at £250k
-      
-    case 4: // League Two: Free - £1.5M (most are free or very low fees)
-      
-      if (rating <= 60) {
-        if (Math.random() < 0.70) return 0; // 70% free
-        return Math.floor(Math.random() * 50000); // £0-50k
-      }
-      
-      // Base fees WITHOUT heavy modifiers
-      if (rating >= 67) {
-        // Top tier (67-68): £400k - £800k base
-        baseTransferFee = 400000 + ((rating - 67) / 1) * 400000;
-      } else if (rating >= 65) {
-        // Upper-mid (65-66): £150k - £400k
-        baseTransferFee = 150000 + ((rating - 65) / 2) * 250000;
-      } else if (rating >= 63) {
-        // Mid tier (63-64): £60k - £150k
-        baseTransferFee = 60000 + ((rating - 63) / 2) * 90000;
-      } else {
-        // Low tier (61-62): £20k - £60k
-        baseTransferFee = 20000 + ((rating - 61) / 2) * 40000;
-      }
-      
-      // LIGHT modifiers only
-      if (player.age <= 21) {
-        baseTransferFee *= 1.3; // Young prospect
-      } else if (player.age >= 30) {
-        baseTransferFee *= 0.75; // Older player discount
-      }
-      
-      if (player.position === 'FWD' && rating >= 65) {
-        baseTransferFee *= 1.15; // Goal scorers worth more
-      }
-      
-      // Small random variation (±20%)
-      baseTransferFee *= (0.80 + Math.random() * 0.40);
-      
-      return Math.floor(Math.max(0, Math.min(1500000, baseTransferFee)));
-      
-    case 3: // League One: £50k - £3M
-      
-      // Low-rated players (under 64) have chance of being cheap
-      if (rating < 64 && Math.random() < 0.30) {
-        return Math.floor(50000 + Math.random() * 100000); // £50k-150k
-      }
-      
-      // Base fees
-      if (rating >= 72) {
-        // Top tier (72-74): £1.5M - £2.5M base
-        baseTransferFee = 1500000 + ((rating - 72) / 2) * 1000000;
-      } else if (rating >= 68) {
-        // Upper-mid (68-71): £600k - £1.5M
-        baseTransferFee = 600000 + ((rating - 68) / 4) * 900000;
-      } else if (rating >= 65) {
-        // Mid tier (65-67): £200k - £600k
-        baseTransferFee = 200000 + ((rating - 65) / 3) * 400000;
-      } else {
-        // Low tier (62-64): £50k - £200k
-        baseTransferFee = 50000 + ((rating - 62) / 3) * 150000;
-      }
-      
-      // Moderate modifiers
-      if (player.age <= 21) {
-        baseTransferFee *= 1.4;
-      } else if (player.age <= 24) {
-        baseTransferFee *= 1.2;
-      } else if (player.age >= 30) {
-        baseTransferFee *= 0.75;
-      }
-      
-      if (player.position === 'FWD') baseTransferFee *= 1.15;
-      else if (player.position === 'MID') baseTransferFee *= 1.1;
-      
-      baseTransferFee *= (0.80 + Math.random() * 0.40);
-      
-      return Math.floor(Math.max(50000, Math.min(3000000, baseTransferFee)));
-      
-    case 2: // Championship: £250k - £15M
-      
-      // Base fees
-      if (rating >= 80) {
-        // Elite (80-82): £8M - £12M base
-        baseTransferFee = 8000000 + ((rating - 80) / 2) * 4000000;
-      } else if (rating >= 76) {
-        // Very good (76-79): £3M - £8M
-        baseTransferFee = 3000000 + ((rating - 76) / 4) * 5000000;
-      } else if (rating >= 73) {
-        // Good (73-75): £1M - £3M
-        baseTransferFee = 1000000 + ((rating - 73) / 3) * 2000000;
-      } else {
-        // Decent (70-72): £250k - £1M
-        baseTransferFee = 250000 + ((rating - 70) / 3) * 750000;
-      }
-      
-      // Standard modifiers
-      if (player.age <= 21) {
-        baseTransferFee *= 1.6;
-      } else if (player.age <= 24) {
-        baseTransferFee *= 1.3;
-      } else if (player.age <= 27) {
-        baseTransferFee *= 1.1;
-      } else if (player.age >= 30) {
-        baseTransferFee *= 0.7;
-      }
-      
-      if (player.position === 'FWD') baseTransferFee *= 1.2;
-      else if (player.position === 'MID') baseTransferFee *= 1.1;
-      else if (player.position === 'GK') baseTransferFee *= 0.9;
-      
-      baseTransferFee *= (0.80 + Math.random() * 0.40);
-      
-      return Math.floor(Math.max(250000, Math.min(15000000, baseTransferFee)));
-      
-    case 1: // Premier League: £5M - £150M+
-      
-      // Base fees
-      if (rating >= 90) {
-        // World class (90-95): £60M - £120M base
-        baseTransferFee = 60000000 + ((rating - 90) / 5) * 60000000;
-      } else if (rating >= 85) {
-        // Elite (85-89): £25M - £60M
-        baseTransferFee = 25000000 + ((rating - 85) / 5) * 35000000;
-      } else if (rating >= 80) {
-        // Very good (80-84): £10M - £25M
-        baseTransferFee = 10000000 + ((rating - 80) / 5) * 15000000;
-      } else {
-        // Good (75-79): £5M - £10M
-        baseTransferFee = 5000000 + ((rating - 75) / 5) * 5000000;
-      }
-      
-      // Full modifiers
-      if (player.age <= 21) {
-        baseTransferFee *= 1.7;
-      } else if (player.age <= 24) {
-        baseTransferFee *= 1.4;
-      } else if (player.age <= 27) {
-        baseTransferFee *= 1.15;
-      } else if (player.age >= 30) {
-        baseTransferFee *= 0.65;
-      }
-      
-      if (player.position === 'FWD') baseTransferFee *= 1.2;
-      else if (player.position === 'MID') baseTransferFee *= 1.1;
-      else if (player.position === 'GK') baseTransferFee *= 0.85;
-      
-      baseTransferFee *= (0.80 + Math.random() * 0.40);
-      
-      return Math.floor(Math.max(5000000, Math.min(150000000, baseTransferFee)));
-      
-    default:
-      return 0;
+  // Transfer fees based PURELY on rating, regardless of league
+  
+  // 45-58: Free transfers (bottom tier)
+  if (rating <= 58) {
+    if (Math.random() < 0.85) return 0;
+    return Math.floor(Math.random() * 15000); // £0-15k
   }
+  
+  // 59-62: Mostly free, some nominal fees (£0-£20k)
+  if (rating <= 62) {
+    if (Math.random() < 0.70) return 0;
+    return Math.floor(5000 + Math.random() * 15000);
+  }
+  
+  // 63-65: Small fees (£10k-£40k)
+  if (rating <= 65) {
+    if (Math.random() < 0.40) return 0;
+    baseTransferFee = 10000 + ((rating - 63) / 2) * 30000;
+  }
+  // 66-68: League Two level (£40k-£80k)
+  else if (rating <= 68) {
+    baseTransferFee = 40000 + ((rating - 66) / 2) * 40000;
+  }
+  // 69-72: League Two star / League One average (£80k-£160k)
+  else if (rating <= 72) {
+    baseTransferFee = 80000 + ((rating - 69) / 1) * 80000;
+  }
+  // 73-75: League One starters (£250k-£600k)
+  else if (rating <= 73) {
+    baseTransferFee = 200000 + ((rating - 73) / 2) * 250000;
+  }
+  // 76-78: League One star / Championship average (£450k-£800k)
+  else if (rating <= 78) {
+    baseTransferFee = 450000 + ((rating - 76) / 1) * 250000;
+  }
+  // 78-80: Championship starters (£1M-£4M)
+  else if (rating <= 80) {
+    baseTransferFee = 1000000 + ((rating - 78) / 2) * 3000000;
+  }
+  // 81-83: Championship star / Low PL (£3.5M-£8M)
+  else if (rating <= 83) {
+    baseTransferFee = 3500000 + ((rating - 81) / 1) * 4500000;
+  }
+  // 84-86: Championship top / PL rotation (£7M-£18M)
+  else if (rating <= 86) {
+    baseTransferFee = 7000000 + ((rating - 84) / 2) * 11000000;
+  }
+  // 87-89: PL regulars (£16M-£30M)
+  else if (rating <= 89) {
+    baseTransferFee = 16000000 + ((rating - 87) / 1) * 14000000;
+  }
+  // 90-93: PL good players/stars (£28M-£50M)
+  else if (rating <= 93) {
+    baseTransferFee = 28000000 + ((rating - 90) / 2) * 22000000;
+  }
+  // 94-96: PL stars (£48M-£70M)
+  else if (rating <= 96) {
+    baseTransferFee = 48000000 + ((rating - 94) / 2) * 22000000;
+  }
+  // 96-97: World class (£68M-£95M)
+  else if (rating <= 97) {
+    baseTransferFee = 68000000 + ((rating - 96) / 2) * 27000000;
+  }
+  // 98+: Elite (£90M-£140M)
+  else {
+    baseTransferFee = 90000000 + ((rating - 98) / 4) * 50000000;
+  }
+  
+  // Age modifiers
+  if (player.age <= 21) {
+    baseTransferFee *= 1.35; // Young prospect premium
+  } else if (player.age <= 24) {
+    baseTransferFee *= 1.20; // Developing player
+  } else if (player.age <= 27) {
+    baseTransferFee *= 1.05; // Prime years
+  } else if (player.age >= 30) {
+    baseTransferFee *= 0.65; // Aging discount
+  } else if (player.age >= 33) {
+    baseTransferFee *= 0.45; // Veteran discount
+  }
+  
+  // Position premiums
+  if (player.position === 'FWD') {
+    baseTransferFee *= 1.15; // Goalscorers worth more
+  } else if (player.position === 'MID') {
+    baseTransferFee *= 1.08; // Playmakers premium
+  } else if (player.position === 'GK') {
+    baseTransferFee *= 0.90; // GKs generally cheaper
+  }
+  
+  // Random market variation (±25%)
+  baseTransferFee *= (0.75 + Math.random() * 0.50);
+  
+  // Enforce reasonable caps per rating tier
+  if (rating <= 68) {
+    baseTransferFee = Math.min(200000, baseTransferFee);
+  } else if (rating <= 74) {
+    baseTransferFee = Math.min(750000, baseTransferFee);
+  } else if (rating <= 82) {
+    baseTransferFee = Math.min(20000000, baseTransferFee);
+  } else {
+    baseTransferFee = Math.min(150000000, baseTransferFee);
+  }
+  
+  return Math.floor(Math.max(0, baseTransferFee));
 }
+
 function negotiateContract(player, offer) {
   const yearlyOffer = offer.salary;
   
@@ -3404,7 +3339,7 @@ function negotiateContract(player, offer) {
   // If the offer equals or exceeds their counteroffer, they should accept
   if (offerRatio >= 0.98) {
     // Close enough to their demand - very high acceptance
-    return { accepted: Math.random() < 0.95, marketValue: counterofferValue };
+    return { accepted: true };
   }
   
   const optimalRatio = 1.0;
@@ -3624,16 +3559,12 @@ function offerContractWithFee(player, years, salary, negotiatedTransferFee) {
     }
   }
   
-  if (negotiatedTransferFee > gameState.money) {
-    alert(`Not enough money! Transfer fee: £${(negotiatedTransferFee / 1000).toFixed(0)}k`);
-    return;
-  }
-  
 
   const { accepted, marketValue } = negotiateContract(player, { years, salary });
   
   if (view === 'freeagents') {
     if (accepted) {
+      window.scrollTo({ top: 0, behavior: 'smooth' }); // Scroll to top
       const newPlayer = { 
         ...player, 
         contractYears: years, 
@@ -3923,7 +3854,7 @@ function upgradeFacility(facilityName) {
       },
       'Medical Center': {
         0: 500000,
-        1: 1200000,
+        1: 1600000,
         2: 3000000,
         3: 7000000,
         4: 14000000
@@ -4145,11 +4076,12 @@ if (view === 'start') {
           <div className="start-info">
             <h3 className="start-info-title">Game Features:</h3>
             <ul className="start-info-list">
+              <li>Inspired by Welcome to Wrexham</li>
               <li>Start in the National League with £2M budget</li>
               <li>Manage squad, sign free agents, and negotiate contracts</li>
               <li>Upgrade facilities to boost performance</li>
               <li>Navigate through 5 divisions to reach the Premier League</li>
-              <li>Survive financially - bankruptcy at -£2M ends the game</li>
+              <li>Survive financially - bankruptcy at -£10M or multiple heavy debt seasons end the game</li>
               <li>Auto-saves your progress</li>
             </ul>
           </div>
@@ -4176,6 +4108,16 @@ if (view === 'gameover') {
                 </p>
               </>
             )}
+
+            {gameOverReason.reason === 'relegated' && (
+              <>
+                <h2 className="gameover-reason">Sacked by the Board</h2>
+                <p className="gameover-text">
+                  The board has lost confidence in you as {gameState?.teamName || 'Your club'} descends out of its professional status😭
+                </p>
+              </>
+            )}
+
             
             {gameOverReason.reason === 'fired' && (
               <>
@@ -4332,7 +4274,7 @@ if (view === 'freeagents') {
                       {player.rating} OVR
                     </span>
                     <span className="player-age">Age: {player.age}</span>
-                    {player.requiresTransferFee ? (
+                    {player.requiresTransferFee && player.transferFee > 0 ? (
                       <span className="badge badge-warning">Paid Transfer</span>
                     ) : (
                       <span className="badge badge-success">Free Transfer</span>
@@ -4352,7 +4294,7 @@ if (view === 'freeagents') {
                 <div className="player-actions">
                   <div className="player-salary">
                     £{(player.salary / 1000).toFixed(0)}k/year
-                    {player.requiresTransferFee && player.transferFee && (
+                    {player.requiresTransferFee && player.transferFee > 0 && (
                       <div className="text-warning" style={{ fontSize: '0.875rem' }}>
                         Fee: £{(player.transferFee / 1000).toFixed(0)}k
                       </div>
@@ -4470,7 +4412,7 @@ if (view === 'freeagents') {
                     
                     {player.requiresTransferFee && player.transferFee ? (
                       <div style={{ marginTop: '12px', padding: '12px', background: 'rgba(234, 179, 8, 0.2)', borderRadius: '6px' }}>
-                        <strong className="text-warning">Transfer Fee Required:</strong>
+                        <strong className="text-warning">Transfer Fee:</strong>
                         <br />
                         <input
                           type="number"
@@ -4945,39 +4887,42 @@ if (view === 'transfers') {
           <h3 className="section-title">Your Squad - List Players for Transfer</h3>
           <div className="player-list">
             {gameState.squad
-              .filter(p => !gameState.transferOffers.some(offer => offer.player.id === p.id && offer.status === 'pending'))
-              .sort((a, b) => b.rating - a.rating)
-              .map(player => {
-                // Calculate realistic transfer fee (not just salary)
-                const marketValue = calculateTransferFee(player, gameState.league);
-                const rejectedOffer = gameState.transferOffers.find(o => o.player.id === player.id && o.status === 'rejected');
-                
-                return (
-                  <div key={player.id} className={`player-card ${rejectedOffer ? 'player-rejected' : ''}`}>
-                    <div className="player-header">
-                      <div className="player-info">
-                        <div className="player-name-row">
-                          <span className="player-name">{player.name}</span>
-                          <span className="badge badge-position">{player.position}</span>
-                          <span className={`player-rating rating-${player.rating >= 70 ? 'high' : player.rating >= 60 ? 'medium' : 'low'}`}>
-                            {player.rating} OVR
-                          </span>
-                          <span className="player-age">Age: {player.age}</span>
-                          {rejectedOffer && (
-                            <span className="badge badge-danger">No Offers</span>
-                          )}
-                        </div>
-                        <div className="player-stats">
-                          <div>PAC: {player.stats.pace}</div>
-                          <div>SHO: {player.stats.shooting}</div>
-                          <div>PAS: {player.stats.passing}</div>
-                          <div>DEF: {player.stats.defending}</div>
-                          <div>PHY: {player.stats.physical}</div>
-                        </div>
-                        <div className="player-contract-info">
-                            Current Salary: £{(player.salary / 1000).toFixed(0)}k | 
-                            Market Value: £{(marketValue / 1000).toFixed(0)}k
-                        </div>
+            .filter(p => !gameState.transferOffers.some(offer => offer.player.id === p.id && offer.status === 'pending'))
+            .sort((a, b) => b.rating - a.rating)
+            .map(player => {
+              // Store market value in player object if not already there, so it doesn't recalculate
+              if (!player.cachedMarketValue) {
+                player.cachedMarketValue = calculateTransferFee(player, gameState.league);
+              }
+              const marketValue = player.cachedMarketValue;
+              const rejectedOffer = gameState.transferOffers.find(o => o.player.id === player.id && o.status === 'rejected');
+              
+              return (
+                <div key={player.id} className={`player-card ${rejectedOffer ? 'player-rejected' : ''}`}>
+                  <div className="player-header">
+                    <div className="player-info">
+                      <div className="player-name-row">
+                        <span className="player-name">{player.name}</span>
+                        <span className="badge badge-position">{player.position}</span>
+                        <span className={`player-rating rating-${player.rating >= 70 ? 'high' : player.rating >= 60 ? 'medium' : 'low'}`}>
+                          {player.rating} OVR
+                        </span>
+                        <span className="player-age">Age: {player.age}</span>
+                        {rejectedOffer && (
+                          <span className="badge badge-danger">No Offers</span>
+                        )}
+                      </div>
+                      <div className="player-stats">
+                        <div>PAC: {player.stats.pace}</div>
+                        <div>SHO: {player.stats.shooting}</div>
+                        <div>PAS: {player.stats.passing}</div>
+                        <div>DEF: {player.stats.defending}</div>
+                        <div>PHY: {player.stats.physical}</div>
+                      </div>
+                      <div className="player-contract-info">
+                          Current Salary: £{(player.salary / 1000).toFixed(0)}k | 
+                          Market Value: £{(marketValue / 1000).toFixed(0)}k
+                      </div>
                         <div className="player-season-stats">
                           Season: {player.seasonStats.appearances} apps, {player.seasonStats.goals}G, {player.seasonStats.assists}A
                         </div>
@@ -5002,7 +4947,7 @@ if (view === 'transfers') {
                             min="10"
                             step="10"
                             placeholder="0"
-                            defaultValue={Math.round(marketValue * 2 / 1000)} // Default to 2x salary (realistic transfer fee)
+                            defaultValue={Math.round(marketValue/1000)} // Default to salary (realistic transfer fee)
                             id={`transfer-${player.id}`}
                             className="form-input"
                           />
@@ -5373,10 +5318,10 @@ return (
               <h3 className="text-danger">⚠️ HEAVY DEBT WARNING</h3>
               <p>
                 Your club is £{(Math.abs(gameState.money) / 1000000).toFixed(2)}M in debt. 
-                {gameState.consecutiveSeasonsInDebt === 1 && (
+                {gameState.consecutiveSeasonsInDebt === 2 && (
                   <span className="text-warning"> This is your second consecutive season in debt - one more and you'll be sacked!</span>
                 )}
-                {gameState.consecutiveSeasonsInDebt === 0 && (
+                {gameState.consecutiveSeasonsInDebt === 1 && (
                   <span> Another season like this and the board will start losing patience.</span>
                 )}
               </p>
