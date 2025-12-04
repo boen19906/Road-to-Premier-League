@@ -155,7 +155,7 @@ const TEAM_NAMES = {
 const [freeAgentMessage, setFreeAgentMessage] = useState(null);
 const [transferMessage, setTransferMessage] = useState(null);
 
-const [view, setView] = useState('start'); // start, main, freeagents, standings, contracts, gameover, transfer
+const [view, setView] = useState('start'); // start, main, freeagents, standings, contracts, gameover, transfer, academy
 const [selectedPlayer, setSelectedPlayer] = useState(null);
 const [contractOffer, setContractOffer] = useState({ years: 1, salary: 0 });
 const [teamNameInput, setTeamNameInput] = useState('');
@@ -173,7 +173,7 @@ function initializeGame(teamName) {
   season: 1,
   league: 5,
   matchday: 0,
-  money: 2000000,
+  money: 3000000,
   reputation: 50,
   facilities: JSON.parse(JSON.stringify(FACILITIES)),
   squad: [],
@@ -197,7 +197,8 @@ function initializeGame(teamName) {
   consecutiveSeasonsInDebt: 0,
   leagueMembership: initializeLeagueMembership(teamName || 'Your Club FC'), // FIRST
   teamRatings: initializeTeamRatings(teamName || 'Your Club FC'), // SECOND
-  fixtureSchedule: null 
+  fixtureSchedule: null,
+  academyPlayers: [] // Add this line 
 };
 
 // NOW generate standings using both membership and ratings
@@ -549,6 +550,77 @@ function generateFreeAgentsByPhase(league, reputation, phase) {
   console.log('Paid transfers:', agents.filter(a => a.requiresTransferFee).length);
   
   return agents.sort((a, b) => b.rating - a.rating);
+}
+
+function generateAcademyPlayers(academyLevel, league, reputation) {
+  if (academyLevel === 0) return []; // No academy = no prospects
+  
+  // Number of prospects: 4-7 players
+  const count = 4 + Math.floor(Math.random() * 4);
+  
+  // Rating ranges based on academy level
+  let minRating, maxRating, avgRating;
+  switch(academyLevel) {
+    case 1:
+      minRating = 50;
+      maxRating = 65;
+      avgRating = 55; // Most will be around here
+      break;
+    case 2:
+      minRating = 55;
+      maxRating = 70;
+      avgRating = 60;
+      break;
+    case 3:
+      minRating = 60;
+      maxRating = 75;
+      avgRating = 65;
+      break;
+    case 4:
+      minRating = 65;
+      maxRating = 80;
+      avgRating = 70;
+      break;
+    case 5:
+      minRating = 70;
+      maxRating = 95;
+      avgRating = 75;
+      break;
+    default:
+      return [];
+  }
+  
+  const prospects = [];
+  const positions = { GK: 1, DEF: 2, MID: 2, FWD: 2 }; // Rough distribution
+  
+  // Generate prospects
+  for (let i = 0; i < count; i++) {
+    // Pick random position
+    const posArray = ['GK', 'DEF', 'MID', 'FWD'];
+    const position = posArray[Math.floor(Math.random() * posArray.length)];
+    
+    // Use normal distribution to bias toward avgRating
+    const u1 = Math.random();
+    const u2 = Math.random();
+    const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+    
+    // Scale z to rating range (std dev of ~5 for academy level)
+    let rating = Math.round(avgRating + z * 5);
+    rating = Math.max(minRating, Math.min(maxRating, rating));
+    
+    // Generate young player (16-19 years old)
+    const age = 16 + Math.floor(Math.random() * 4);
+    
+    const player = generatePlayer(position, league, reputation, true);
+    player.rating = rating;
+    player.age = age;
+    player.salary = calculateMarketValue(player, league);
+    player.isAcademyProspect = true;
+    
+    prospects.push(player);
+  }
+  
+  return prospects.sort((a, b) => b.rating - a.rating);
 }
 
 function generateStandingsFromMembership(league, playerTeam, leagueMembership, teamRatings) {
@@ -3040,6 +3112,10 @@ const newStandings = generateStandingsFromMembership(newLeague, gameState.teamNa
 
   const newFreeAgents = generateFreeAgentsByPhase(newLeague, gameState.reputation, 'offseason');
 
+  // Generate academy players based on academy level
+  const academy = gameState.facilities.find(f => f.name === 'Youth Academy');
+  const newAcademyPlayers = generateAcademyPlayers(academy.level, newLeague, gameState.reputation);
+
   setGameState(prev => ({
     ...prev,
     squad: updatedSquad,
@@ -3047,6 +3123,7 @@ const newStandings = generateStandingsFromMembership(newLeague, gameState.teamNa
     leagueMembership: updatedMembership, // Store updated membership
     teamRatings: updatedRatings,
     freeAgents: newFreeAgents,
+    academyPlayers: newAcademyPlayers, // Add this line
     matches: [],
     seasonPhase: 'preseason-transfers',
     contractNegotiations: [],
@@ -3634,6 +3711,73 @@ function offerContractWithFee(player, years, salary, negotiatedTransferFee) {
   }
 }
 
+function offerContractToAcademyPlayer(player, years, salary) {
+  const { accepted, marketValue, reachedLimit } = negotiateContract(player, { years, salary });
+  
+  if (accepted) {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const newPlayer = { 
+      ...player, 
+      contractYears: years, 
+      salary,
+      morale: 60 + Math.floor(Math.random() * 25),
+      seasonStats: {
+        appearances: 0,
+        goals: 0,
+        assists: 0,
+        yellowCards: 0,
+        redCards: 0
+      }
+    };
+    
+    setGameState(prev => ({
+      ...prev,
+      squad: [...prev.squad, newPlayer],
+      academyPlayers: prev.academyPlayers.map(p => 
+        p.id === player.id ? { ...p, status: 'accepted', offer: { years, salary }, marketValue } : p
+      )
+    }));
+    
+    setFreeAgentMessage({ player: player.name, accepted: true, agreedSalary: salary });
+    setSelectedPlayer(null);
+  } else {
+    const newRejectionCount = (player.rejectionCount || 0) + 1;
+    
+    setGameState(prev => ({
+      ...prev,
+      academyPlayers: prev.academyPlayers.map(p => 
+        p.id === player.id ? { 
+          ...p, 
+          status: reachedLimit ? 'walked_away' : 'rejected', 
+          offer: { years, salary }, 
+          marketValue,
+          previousCounteroffer: marketValue,
+          rejectionCount: newRejectionCount,
+          rejectionLimit: player.rejectionLimit
+        } : p
+      )
+    }));
+    
+    if (reachedLimit) {
+      setFreeAgentMessage({ 
+        player: player.name, 
+        accepted: false, 
+        walkedAway: true,
+        rejectionCount: newRejectionCount
+      });
+    } else {
+      setFreeAgentMessage({ 
+        player: player.name, 
+        accepted: false, 
+        marketValue, 
+        offer: salary,
+        rejectionCount: newRejectionCount,
+        rejectionLimit: player.rejectionLimit
+      });
+    }
+  }
+}
+
 function releasePlayer(playerId) {
   const player = gameState.squad.find(p => p.id === playerId);
   if (window.confirm(`Release ${player.name}? No compensation will be received.`)) {
@@ -3963,6 +4107,58 @@ function validateRoster(squad) {
   };
 }
 
+function getStartingLineup(squad) {
+  // Use same logic as calculateTeamRating to determine starters
+  const gks = squad.filter(p => p.position === 'GK').sort((a, b) => b.rating - a.rating);
+  const defs = squad.filter(p => p.position === 'DEF').sort((a, b) => b.rating - a.rating);
+  const mids = squad.filter(p => p.position === 'MID').sort((a, b) => b.rating - a.rating);
+  const fwds = squad.filter(p => p.position === 'FWD').sort((a, b) => b.rating - a.rating);
+  
+  const formations = [
+    [4, 4, 2],
+    [4, 3, 3],
+    [4, 5, 1],
+    [5, 4, 1],
+    [5, 3, 2],
+    [3, 5, 2],
+    [3, 4, 3]
+  ];
+  
+  let bestFormation = null;
+  let bestRating = 0;
+  
+  formations.forEach(([numDef, numMid, numFwd]) => {
+    if (gks.length < 1 || defs.length < numDef || 
+        mids.length < numMid || fwds.length < numFwd) {
+      return;
+    }
+    
+    const starter_gk = gks[0];
+    const starter_defs = defs.slice(0, numDef);
+    const starter_mids = mids.slice(0, numMid);
+    const starter_fwds = fwds.slice(0, numFwd);
+    
+    const allStarters = [starter_gk, ...starter_defs, ...starter_mids, ...starter_fwds];
+    const formationRating = allStarters.reduce((sum, p) => sum + p.rating, 0) / 11;
+    
+    if (formationRating > bestRating) {
+      bestRating = formationRating;
+      bestFormation = {
+        starters: allStarters,
+        formation: [numDef, numMid, numFwd]
+      };
+    }
+  });
+  
+  if (!bestFormation) {
+    const sortedSquad = [...squad].sort((a, b) => b.rating - a.rating);
+    bestFormation = { starters: sortedSquad.slice(0, 11) };
+  }
+  
+  // Return set of starter IDs for quick lookup
+  return new Set(bestFormation.starters.map(p => p.id));
+}
+
 useEffect(() => {
   if (!gameState || !gameState.paused && gameState.seasonPhase === 'regular') {
     if (!gameState) return;
@@ -3976,7 +4172,7 @@ useEffect(() => {
 
     const interval = setInterval(() => {
       simulateMatchday();
-    }, 2000);
+    }, 500);
     
     return () => clearInterval(interval);
   }
@@ -4012,6 +4208,12 @@ if (view === 'start') {
     <div className="game-container">
       <div className="content-wrapper">
         <div className="start-screen">
+          {/* Add logo */}
+          <img 
+            src="/RTP_LOGO.png" 
+            alt="Road to the Premier League Logo" 
+            className="start-logo"
+          />
           <h1 className="start-title">Road to the Premier League</h1>
           <p className="start-subtitle">Build your club from the National League to the top of English football</p>
           
@@ -4077,7 +4279,7 @@ if (view === 'start') {
             <h3 className="start-info-title">Game Features:</h3>
             <ul className="start-info-list">
               <li>Inspired by Welcome to Wrexham</li>
-              <li>Start in the National League with £2M budget</li>
+              <li>Start in the National League with £3M budget</li>
               <li>Manage squad, sign free agents, and negotiate contracts</li>
               <li>Upgrade facilities to boost performance</li>
               <li>Navigate through 5 divisions to reach the Premier League</li>
@@ -4989,6 +5191,204 @@ if (view === 'transfers') {
   );
 }
 
+if (view === 'academy') {
+  const academy = gameState.facilities.find(f => f.name === 'Youth Academy');
+  
+  return (
+    <div className="game-container">
+      <div className="content-wrapper">
+        <div className="header-card">
+          <div className="header-content">
+            <h2>Youth Academy Prospects (Level {academy.level})</h2>
+            <button onClick={() => { 
+              setView('main'); 
+              setFreeAgentMessage(null); 
+              setSelectedPlayer(null);
+            }} className="btn btn-secondary">
+              Back to Main
+            </button>
+          </div>
+          <div className="header-stats">
+            Balance: £{(gameState.money / 1000000).toFixed(2)}M | Squad Size: {gameState.squad.length}/25
+            <span className="text-primary"> | Youth Academy Graduates (Free Signings)</span>
+          </div>
+        </div>
+
+        {freeAgentMessage && (
+          <div className={`message-card ${freeAgentMessage.accepted ? 'message-success' : 'message-error'}`}>
+            <div className="message-title">
+              {freeAgentMessage.accepted 
+                ? `✓ ${freeAgentMessage.player} has joined the first team from the academy!`
+                : `✗ ${freeAgentMessage.player} has rejected your offer.`}
+            </div>
+            {freeAgentMessage.agreedSalary && (
+              <div className="message-details">
+                <span className="text-success">
+                  Agreed Terms: £{(freeAgentMessage.agreedSalary / 1000).toFixed(0)}k/year
+                </span>
+              </div>
+            )}
+            {freeAgentMessage.marketValue && !freeAgentMessage.accepted && (
+              <div className="message-details text-warning">
+                Your Offer: £{(freeAgentMessage.offer / 1000).toFixed(0)}k/year | 
+                Player Counteroffer: £{(freeAgentMessage.marketValue / 1000).toFixed(0)}k/year
+              </div>
+            )}
+            <button 
+              onClick={() => setFreeAgentMessage(null)}
+              className="btn btn-small"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        {gameState.academyPlayers.length === 0 ? (
+          <div className="empty-state-card">
+            <p className="empty-state-title">No academy prospects available</p>
+            <p className="empty-state-subtitle">Upgrade your Youth Academy to start producing talent!</p>
+          </div>
+        ) : (
+          <div className="player-list">
+            {gameState.academyPlayers.map(player => (
+              <div key={player.id} className={`player-card ${player.status === 'rejected' ? 'player-rejected' : player.status === 'accepted' ? 'player-accepted' : ''}`}>
+                <div className="player-header">
+                  <div className="player-info">
+                    <div className="player-name-row">
+                      <span className="player-name">{player.name}</span>
+                      <span className="badge badge-position">{player.position}</span>
+                      <span className={`player-rating rating-${player.rating >= 70 ? 'high' : player.rating >= 60 ? 'medium' : 'low'}`}>
+                        {player.rating} OVR
+                      </span>
+                      <span className="player-age">Age: {player.age}</span>
+                      <span className="badge badge-success">Academy Graduate</span>
+                      {player.status === 'rejected' && (
+                        <span className="badge badge-danger">Previously Rejected</span>
+                      )}
+                      {player.status === 'accepted' && (
+                        <span className="badge badge-success">✓ Promoted to First Team</span>
+                      )}
+                    </div>
+                    <div className="player-stats">
+                      <div>PAC: {player.stats.pace}</div>
+                      <div>SHO: {player.stats.shooting}</div>
+                      <div>PAS: {player.stats.passing}</div>
+                      <div>DEF: {player.stats.defending}</div>
+                      <div>PHY: {player.stats.physical}</div>
+                    </div>
+                  </div>
+                  <div className="player-actions">
+                    <div className="player-salary">
+                      £{(player.salary / 1000).toFixed(0)}k/year
+                    </div>
+                    {player.status !== 'accepted' && (
+                      <button
+                        onClick={() => setSelectedPlayer(player)}
+                        className="btn btn-success btn-bold"
+                      >
+                        Promote to First Team
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {selectedPlayer?.id === player.id && player.status !== 'accepted' && (
+                  <div className="contract-offer-section">
+                    <h3 className="section-title">First Team Contract Offer</h3>
+                    
+                    {player.status === 'rejected' && player.offer && player.marketValue && (
+                      <div className="rejection-notice">
+                        <div className="rejection-title">⚠️ Contract Rejected:</div>
+                        <div>Your Offer: £{(player.offer.salary / 1000).toFixed(0)}k/year for {player.offer.years} years</div>
+                        <div className="text-warning">
+                          Player Counteroffer: £{(player.marketValue / 1000).toFixed(0)}k/year
+                          (you offered {Math.round((player.offer.salary / player.marketValue) * 100)}%)
+                        </div>
+                        <div className="rejection-hint">Increase your salary offer</div>
+                      </div>
+                    )}
+                    
+                    <div className="form-grid">
+                      <div className="form-group">
+                        <label>Contract Length (years)</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="5"
+                          value={contractOffer.years}
+                          onChange={(e) => setContractOffer(prev => ({ ...prev, years: parseInt(e.target.value) }))}
+                          className="form-input"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Annual Salary (£000s)</label>
+                        <input
+                          type="number"
+                          min="10"
+                          step="5"
+                          placeholder="0"
+                          value={
+                            contractOffer.salary === "" 
+                              ? "" 
+                              : Math.round((contractOffer.salary || player.salary) / 1000)
+                          }
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            if (v === "") {
+                              setContractOffer(prev => ({ ...prev, salary: "" }));
+                              return;
+                            }
+                            const thousands = parseInt(v, 10);
+                            if (!isNaN(thousands)) {
+                              setContractOffer(prev => ({ ...prev, salary: thousands * 1000 }));
+                            }
+                          }}
+                          className="form-input"
+                        />
+                        <div className="form-hint">
+                          Enter amount in thousands (e.g., 65 = £65,000/year)
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="contract-summary">
+                      <strong>Contract Terms:</strong>
+                      <br />
+                      Annual Salary: £{((contractOffer.salary || player.salary) / 1000).toFixed(0)}k/year
+                      <br />
+                      Total Contract Value: £{((contractOffer.salary || player.salary) * contractOffer.years / 1000).toFixed(0)}k
+                      <br />
+                      <span className="text-success">✓ No Transfer Fee Required</span>
+                    </div>
+                    
+                    <div className="button-group">
+                      <button
+                        onClick={() => {
+                          const salary = contractOffer.salary || player.salary;
+                          const years = contractOffer.years;
+                          offerContractToAcademyPlayer(player, years, salary);
+                        }}
+                        className="btn btn-primary btn-bold"
+                      >
+                        Submit Offer
+                      </button>
+                      <button
+                        onClick={() => setSelectedPlayer(null)}
+                        className="btn btn-secondary"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 // Main view
 return (
   <div className="game-container">
@@ -5155,6 +5555,20 @@ return (
           <UserPlus size={20} />
           Transfers (Buy Players)
         </button>
+
+        {/* Add this new button */}
+        {gameState.facilities.find(f => f.name === 'Youth Academy').level >= 1 && gameState.academyPlayers.length > 0 && (
+          <button
+            onClick={() => {
+              setGameState(prev => ({ ...prev, paused: true }));
+              setView('academy');
+            }}
+            className="btn btn-purple btn-bold"
+          >
+            <Users size={20} />
+            Academy Prospects ({gameState.academyPlayers.length})
+          </button>
+        )}
         
         <button
           onClick={() => {
@@ -5428,24 +5842,45 @@ return (
               })()}
             </div>
           </div>
+
+          {/* Add this legend section */}
+          <div className="squad-legend">
+            <div className="squad-legend-item">
+              <div className="squad-legend-box squad-legend-starter"></div>
+              <span>Starting XI</span>
+            </div>
+            <div className="squad-legend-item">
+              <div className="squad-legend-box squad-legend-bench"></div>
+              <span>Bench / Reserves</span>
+            </div>
+          </div>
           
           <div className="squad-list">
-            {POSITIONS.map(pos => {
-              const posPlayers = gameState.squad
-                .filter(p => p.position === pos)
-                .sort((a, b) => b.rating - a.rating);
-              
-              if (posPlayers.length === 0) return null;
-              
-              return (
-                <div key={pos} className="position-group">
-                  <div className="position-header">{pos}</div>
-                  {posPlayers.map(player => (
-                    <div key={player.id} className="squad-player">
+          {POSITIONS.map(pos => {
+            const posPlayers = gameState.squad
+              .filter(p => p.position === pos)
+              .sort((a, b) => b.rating - a.rating);
+            
+            if (posPlayers.length === 0) return null;
+            
+            // Get starting lineup IDs
+            const starterIds = getStartingLineup(gameState.squad);
+            
+            return (
+              <div key={pos} className="position-group">
+                <div className="position-header">{pos}</div>
+                {posPlayers.map(player => {
+                  const isStarter = starterIds.has(player.id);
+                  
+                  return (
+                    <div key={player.id} className={`squad-player ${isStarter ? 'squad-player-starter' : ''}`}>
                       <div className="squad-player-main">
                         <div>
                           <div className="squad-player-name-row">
-                            <div className="squad-player-name">{player.name}</div>
+                            <div className="squad-player-name">
+                              {player.name}
+                              {isStarter && <span className="starter-badge">⭐</span>}
+                            </div>
                             <div className={`squad-player-rating rating-${player.rating >= 70 ? 'high' : player.rating >= 60 ? 'medium' : 'low'}`}>
                               {player.rating}
                             </div>
@@ -5474,11 +5909,12 @@ return (
                         {player.seasonStats.appearances} apps, {player.seasonStats.goals}G, {player.seasonStats.assists}A
                       </div>
                     </div>
-                  ))}
-                </div>
-              );
-            })}
-          </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
           
           <div className="squad-wages">
             <div className="wage-row">
@@ -5501,118 +5937,129 @@ return (
             </h2>
             
             {gameState.facilities.map(facility => {
-              // Calculate cost - use custom logic for Stadium
-              let cost;
-              if (facility.name === 'Stadium') {
-                const stadiumCosts = {
-                  0: 6500000, 1: 14000000, 2: 11000000, 3: 45000000, 4: 55000000
-                };
-                cost = stadiumCosts[facility.level] || 0;
-              } else {
-                const facilityCosts = {
-                  'Training Ground': { 0: 800000, 1: 2000000, 2: 4500000, 3: 10000000, 4: 20000000 },
-                  'Youth Academy': { 0: 600000, 1: 1500000, 2: 3500000, 3: 8000000, 4: 15000000 },
-                  'Medical Center': { 0: 500000, 1: 1200000, 2: 3000000, 3: 7000000, 4: 14000000 }
-                };
-                cost = facilityCosts[facility.name]?.[facility.level] || 0;
-              }
-              
-              const canAfford = gameState.money >= cost;
-              const maxedOut = facility.level >= facility.maxLevel;
-              
-              return (
-                <div key={facility.name} className="facility-item">
-                  <div className="facility-header">
-                    <div>
-                      <div className="facility-name">{facility.name}</div>
-                      <div className="facility-level">
-                        Level {facility.level}/{facility.maxLevel}
-                      </div>
+            // Calculate cost - use custom logic for Stadium
+            let cost;
+            if (facility.name === 'Stadium') {
+              const stadiumCosts = {
+                0: 6500000, 1: 14000000, 2: 11000000, 3: 45000000, 4: 150000000
+              };
+              cost = stadiumCosts[facility.level] || 0;
+            } else {
+              const facilityCosts = {
+                'Training Ground': { 0: 800000, 1: 2000000, 2: 4500000, 3: 10000000, 4: 20000000 },
+                'Youth Academy': { 0: 600000, 1: 1000000, 2: 2000000, 3: 20000000, 4: 50000000 },
+                'Medical Center': { 0: 500000, 1: 1200000, 2: 3000000, 3: 7000000, 4: 14000000 }
+              };
+              cost = facilityCosts[facility.name]?.[facility.level] || 0;
+            }
+            
+            const canAfford = gameState.money >= cost;
+            const maxedOut = facility.level >= facility.maxLevel;
+            
+            return (
+              <div key={facility.name} className="facility-item">
+                <div className="facility-header">
+                  <div>
+                    <div className="facility-name">{facility.name}</div>
+                    <div className="facility-level">
+                      Level {facility.level}/{facility.maxLevel}
                     </div>
-                    <button
-                      onClick={() => upgradeFacility(facility.name)}
-                      disabled={!canAfford || maxedOut}
-                      className={`btn btn-small btn-bold ${
-                        maxedOut ? 'btn-disabled' :
-                        canAfford ? 'btn-primary' : 'btn-disabled'
-                      }`}
-                    >
-                      {maxedOut ? 'MAX' : `£${(cost / 1000000).toFixed(2)}M`}
-                    </button>
                   </div>
-                  <div className="progress-bar">
-                    <div 
-                      className="progress-fill"
-                      style={{ width: `${(facility.level / facility.maxLevel) * 100}%` }}
-                    />
-                  </div>
-                  <div className="facility-bonus">
-                    {facility.name === 'Stadium' ? (
-                      <>
-                        Capacity: {STADIUM_CAPACITIES[facility.level].toLocaleString()} | 
-                        Attendance Bonus: +{facility.attendanceBonus * facility.level}%
-                        {(() => {
-                          // Calculate realistic max attendance for current reputation
-                          let realisticMax;
-                          if (gameState.league === 5) realisticMax = 500 + (gameState.reputation * 45);
-                          else if (gameState.league === 4) realisticMax = 2000 + (gameState.reputation * 60);
-                          else if (gameState.league === 3) realisticMax = 3000 + (gameState.reputation * 120);
-                          else if (gameState.league === 2) realisticMax = 8000 + (gameState.reputation * 220);
-                          else if (gameState.league === 1) realisticMax = 20000 + (gameState.reputation * 400);
-                          
-                          const currentCapacity = STADIUM_CAPACITIES[facility.level];
-                          const nextCapacity = STADIUM_CAPACITIES[facility.level + 1];
-                          
-                          // Warn if next upgrade would be oversized
-                          if (facility.level < facility.maxLevel && nextCapacity > realisticMax * 1.3) {
-                            return (
-                              <span className="facility-hint">
-                                {' '}(Fanbase: ~{Math.floor(realisticMax).toLocaleString()} - upgrade may be premature)
-                              </span>
-                            );
-                          }
-                          // Show next capacity if upgrading makes sense
-                          else if (facility.level < facility.maxLevel) {
-                            return (
-                              <span className="facility-hint">
-                                {' '}(Next: {nextCapacity.toLocaleString()} capacity)
-                              </span>
-                            );
-                          }
-                          return null;
-                        })()}
-                      </>
-                    ) : (
-                      <>
-                        {(() => {
-                          const requiredLevel = getRequiredFacilityLevel(gameState.league);
-                          const impact = facility.level < requiredLevel ? -(requiredLevel - facility.level) * 2 :
-                                        facility.level > requiredLevel ? (facility.level - requiredLevel) * 0.5 : 0;
-                          
-                          return (
-                            <>
-                              Level: {facility.level}/{facility.maxLevel} | 
-                              {facility.level < requiredLevel && (
-                                <span className="text-danger"> Below standard! -{Math.abs(impact)} rating</span>
-                              )}
-                              {facility.level === requiredLevel && (
-                                <span className="text-success"> Meets requirements</span>
-                              )}
-                              {facility.level > requiredLevel && (
-                                <span className="text-primary"> Excellent! +{impact.toFixed(1)} rating</span>
-                              )}
-                              {facility.level < requiredLevel && (
-                                <span className="facility-hint"> (League requires level {requiredLevel})</span>
-                              )}
-                            </>
-                          );
-                        })()}
-                      </>
-                    )}
-                  </div>
+                  <button
+                    onClick={() => upgradeFacility(facility.name)}
+                    disabled={!canAfford || maxedOut}
+                    className={`btn btn-small btn-bold ${
+                      maxedOut ? 'btn-disabled' :
+                      canAfford ? 'btn-primary' : 'btn-disabled'
+                    }`}
+                  >
+                    {maxedOut ? 'MAX' : `£${(cost / 1000000).toFixed(2)}M`}
+                  </button>
                 </div>
-              );
-            })}
+                <div className="progress-bar">
+                  <div 
+                    className="progress-fill"
+                    style={{ width: `${(facility.level / facility.maxLevel) * 100}%` }}
+                  />
+                </div>
+                <div className="facility-bonus">
+                  {facility.name === 'Stadium' ? (
+                    <>
+                      Capacity: {STADIUM_CAPACITIES[facility.level].toLocaleString()} | 
+                      Attendance Bonus: +{facility.attendanceBonus * facility.level}%
+                      {(() => {
+                        // Calculate realistic max attendance for current reputation
+                        let realisticMax;
+                        if (gameState.league === 5) realisticMax = 500 + (gameState.reputation * 45);
+                        else if (gameState.league === 4) realisticMax = 2000 + (gameState.reputation * 60);
+                        else if (gameState.league === 3) realisticMax = 3000 + (gameState.reputation * 120);
+                        else if (gameState.league === 2) realisticMax = 8000 + (gameState.reputation * 220);
+                        else if (gameState.league === 1) realisticMax = 20000 + (gameState.reputation * 400);
+                        
+                        const currentCapacity = STADIUM_CAPACITIES[facility.level];
+                        const nextCapacity = STADIUM_CAPACITIES[facility.level + 1];
+                        
+                        // Warn if next upgrade would be oversized
+                        if (facility.level < facility.maxLevel && nextCapacity > realisticMax * 1.3) {
+                          return (
+                            <span className="facility-hint">
+                              {' '}(Fanbase: ~{Math.floor(realisticMax).toLocaleString()} - upgrade may be premature)
+                            </span>
+                          );
+                        }
+                        // Show next capacity if upgrading makes sense
+                        else if (facility.level < facility.maxLevel) {
+                          return (
+                            <span className="facility-hint">
+                              {' '}(Next: {nextCapacity.toLocaleString()} capacity)
+                            </span>
+                          );
+                        }
+                        return null;
+                      })()}
+                    </>
+                  ) : facility.name === 'Youth Academy' ? (
+                    <>
+                      {/* Youth Academy - show maintenance cost and prospect info */}
+                      Annual Cost: £{(facility.maintenanceCost * facility.level / 1000000).toFixed(2)}M
+                      {facility.level === 0 && (
+                        <span className="facility-hint"> (Upgrade to start producing prospects)</span>
+                      )}
+                      {facility.level >= 1 && (
+                        <span className="text-primary"> | Produces {4 + Math.floor(Math.random() * 4)} prospects per season</span>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {(() => {
+                        const requiredLevel = getRequiredFacilityLevel(gameState.league);
+                        const impact = facility.level < requiredLevel ? -(requiredLevel - facility.level) * 2 :
+                                      facility.level > requiredLevel ? (facility.level - requiredLevel) * 0.5 : 0;
+                        
+                        return (
+                          <>
+                            Level: {facility.level}/{facility.maxLevel} | 
+                            {facility.level < requiredLevel && (
+                              <span className="text-danger"> Below standard! -{Math.abs(impact)} rating</span>
+                            )}
+                            {facility.level === requiredLevel && (
+                              <span className="text-success"> Meets requirements</span>
+                            )}
+                            {facility.level > requiredLevel && (
+                              <span className="text-primary"> Excellent! +{impact.toFixed(1)} rating</span>
+                            )}
+                            {facility.level < requiredLevel && (
+                              <span className="facility-hint"> (League requires level {requiredLevel})</span>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })}
           </div>
 
           {/* Stats */}
