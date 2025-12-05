@@ -709,15 +709,13 @@ function updateAllTeamRatings(teamRatings) {
     const currentRating = updatedRatings[team];
     
     // Normal distribution approximation using Box-Muller transform
-    // Generate two uniform random numbers
     const u1 = Math.random();
     const u2 = Math.random();
     
     // Box-Muller transform to get normal distribution
     const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
     
-    // Scale to range -3 to +3 (z is standard normal, multiply by std dev)
-    // Using std dev of 1.2 means ~95% of values fall within -3 to +3
+    // Scale to range -3 to +3
     let change = Math.round(z * 1.2);
     
     // Clamp to -3 to +3 range
@@ -729,7 +727,7 @@ function updateAllTeamRatings(teamRatings) {
     if (eliteClubs.includes(team)) {
       newRating = Math.max(85, Math.min(95, newRating));
     } else {
-      // Regular teams: 40-95 range
+      // Regular teams: 40-95 range (will be capped by league in updateLeagueMembership)
       newRating = Math.max(40, Math.min(95, newRating));
     }
     
@@ -788,15 +786,15 @@ function adjustRatingForLeagueChange(currentRating, oldLeague, newLeague) {
   // Get target league bounds
   let minRating, maxRating;
   switch(newLeague) {
-    case 5: minRating = 45; maxRating = 62; break;
-    case 4: minRating = 55; maxRating = 68; break;
-    case 3: minRating = 62; maxRating = 74; break;
-    case 2: minRating = 70; maxRating = 82; break;
-    case 1: minRating = 75; maxRating = 95; break;
-    default: minRating = 45; maxRating = 62;
+    case 5: minRating = 45; maxRating = 68; break; // National League (free agency: 45-68)
+    case 4: minRating = 55; maxRating = 72; break; // League Two (free agency: 55-72)
+    case 3: minRating = 60; maxRating = 77; break; // League One (free agency: 60-76)
+    case 2: minRating = 65; maxRating = 84; break; // Championship (free agency: 65-82)
+    case 1: minRating = 70; maxRating = 95; break; // Premier League (free agency: 70-92)
+    default: minRating = 45; maxRating = 68;
   }
   
-  return Math.max(minRating, currentRating + adjustment);
+  return Math.max(minRating, Math.min(maxRating, currentRating + adjustment));
 }
 
 function updateLeagueMembership(oldMembership, standings, oldLeague, newLeague, playoffWinners = {}, teamRatings) {
@@ -1532,6 +1530,28 @@ console.log('Final verification after balancing:', {
   L1: newMembership[3].length,
   L2: newMembership[4].length,
   NL: newMembership[5].length
+});
+
+// This ensures no team exceeds the max rating for their division
+Object.keys(newMembership).forEach(league => {
+  const leagueNum = parseInt(league);
+  let maxRating;
+  
+  switch(leagueNum) {
+    case 5: maxRating = 68; break; // National League
+    case 4: maxRating = 72; break; // League Two
+    case 3: maxRating = 77; break; // League One
+    case 2: maxRating = 84; break; // Championship
+    case 1: maxRating = 95; break; // Premier League (allows for elite 88-95 teams)
+    default: maxRating = 68;
+  }
+  
+  newMembership[leagueNum].forEach(team => {
+    if (newRatings[team] > maxRating) {
+      // Don't just cap - reduce gradually to max
+      newRatings[team] = Math.max(maxRating - 3, Math.min(maxRating, newRatings[team] - 2));
+    }
+  });
 });
   
   return { membership: newMembership, ratings: newRatings };
@@ -2343,17 +2363,15 @@ function endSeason() {
       const team1Rating = qf.team1.isPlayer ? calculateTeamRating(gameState.squad) : qf.team1.rating;
       const team2Rating = qf.team2.isPlayer ? calculateTeamRating(gameState.squad) : qf.team2.rating;
       
+      // Single leg match - no draws possible
       const match = simulatePlayoffLeg(team1Rating, team2Rating, true);
-      const winner = match.home > match.away ? qf.team1 : 
-                    match.away > match.home ? qf.team2 : 
-                    Math.random() > 0.5 ? qf.team1 : qf.team2;
       
       return {
         team1: qf.team1.team,
         team2: qf.team2.team,
         score: `${match.home}-${match.away}`,
-        winner: winner.team,
-        winnerObj: winner
+        winner: match.home > match.away ? qf.team1.team : qf.team2.team,
+        winnerObj: match.home > match.away ? qf.team1 : qf.team2
       };
     });
     
@@ -2392,10 +2410,8 @@ function endSeason() {
     const final2Rating = finalist2.isPlayer ? calculateTeamRating(gameState.squad) : finalist2.rating;
     
     const finalMatch = simulatePlayoffLeg(final1Rating, final2Rating, true);
-    const finalWinner = finalMatch.home > finalMatch.away ? finalist1 : 
-                       finalMatch.away > finalMatch.home ? finalist2 : 
-                       Math.random() > 0.5 ? finalist1 : finalist2;
-    
+    const finalWinner = finalMatch.home > finalMatch.away ? finalist1 : finalist2;
+
     const finalResult = {
       team1: finalist1.team,
       team2: finalist2.team,
@@ -2472,9 +2488,30 @@ function endSeason() {
         const team1Total = leg1.home + leg2.away;
         const team2Total = leg1.away + leg2.home;
         
-        let winner = team1Total > team2Total ? semi.team1 : 
-                    team2Total > team1Total ? semi.team2 : 
-                    Math.random() > 0.5 ? semi.team1 : semi.team2;
+        // If aggregate is tied, determine winner by away goals or extra time/penalties in leg 2
+        let winner;
+        if (team1Total > team2Total) {
+          winner = semi.team1;
+        } else if (team2Total > team1Total) {
+          winner = semi.team2;
+        } else {
+          // Aggregate tied - check away goals
+          const team1AwayGoals = leg2.away;
+          const team2AwayGoals = leg1.away;
+          
+          if (team2AwayGoals > team1AwayGoals) {
+            // Team 2 wins on away goals
+            winner = semi.team2;
+          } else if (team1AwayGoals > team2AwayGoals) {
+            // Team 1 wins on away goals
+            winner = semi.team1;
+          } else {
+            // Still tied - simulate extra time/penalties in leg 2
+            // Give slight advantage to team playing at home in leg 2 (team1)
+            const extraTime = simulatePlayoffLeg(team2Rating, team1Rating, true);
+            winner = extraTime.home > extraTime.away ? semi.team2 : semi.team1;
+          }
+        }
         
         return {
           team1: semi.team1.team,
@@ -2495,10 +2532,8 @@ function endSeason() {
       const final2Rating = finalist2.isPlayer ? calculateTeamRating(gameState.squad) : finalist2.rating;
       
       const finalMatch = simulatePlayoffLeg(final1Rating, final2Rating, true);
-      const finalWinner = finalMatch.home > finalMatch.away ? finalist1 : 
-                        finalMatch.away > finalMatch.home ? finalist2 : 
-                        Math.random() > 0.5 ? finalist1 : finalist2;
-      
+      const finalWinner = finalMatch.home > finalMatch.away ? finalist1 : finalist2;
+
       const finalResult = {
         team1: finalist1.team,
         team2: finalist2.team,
@@ -2558,9 +2593,30 @@ function endSeason() {
         const team1Total = leg1.home + leg2.away;
         const team2Total = leg1.away + leg2.home;
         
-        let winner = team1Total > team2Total ? semi.team1 : 
-                    team2Total > team1Total ? semi.team2 : 
-                    Math.random() > 0.5 ? semi.team1 : semi.team2;
+        // If aggregate is tied, determine winner by away goals or extra time/penalties in leg 2
+        let winner;
+        if (team1Total > team2Total) {
+          winner = semi.team1;
+        } else if (team2Total > team1Total) {
+          winner = semi.team2;
+        } else {
+          // Aggregate tied - check away goals
+          const team1AwayGoals = leg2.away;
+          const team2AwayGoals = leg1.away;
+          
+          if (team2AwayGoals > team1AwayGoals) {
+            // Team 2 wins on away goals
+            winner = semi.team2;
+          } else if (team1AwayGoals > team2AwayGoals) {
+            // Team 1 wins on away goals
+            winner = semi.team1;
+          } else {
+            // Still tied - simulate extra time/penalties in leg 2
+            // Give slight advantage to team playing at home in leg 2 (team1)
+            const extraTime = simulatePlayoffLeg(team2Rating, team1Rating, true);
+            winner = extraTime.home > extraTime.away ? semi.team2 : semi.team1;
+          }
+        }
         
         return {
           team1: semi.team1.team,
@@ -2581,10 +2637,8 @@ function endSeason() {
       const final2Rating = finalist2.isPlayer ? calculateTeamRating(gameState.squad) : finalist2.rating;
       
       const finalMatch = simulatePlayoffLeg(final1Rating, final2Rating, true);
-      const finalWinner = finalMatch.home > finalMatch.away ? finalist1 : 
-                        finalMatch.away > finalMatch.home ? finalist2 : 
-                        Math.random() > 0.5 ? finalist1 : finalist2;
-      
+      const finalWinner = finalMatch.home > finalMatch.away ? finalist1 : finalist2;
+
       const finalResult = {
         team1: finalist1.team,
         team2: finalist2.team,
@@ -2644,9 +2698,30 @@ function endSeason() {
         const team1Total = leg1.home + leg2.away;
         const team2Total = leg1.away + leg2.home;
         
-        let winner = team1Total > team2Total ? semi.team1 : 
-                    team2Total > team1Total ? semi.team2 : 
-                    Math.random() > 0.5 ? semi.team1 : semi.team2;
+        // If aggregate is tied, determine winner by away goals or extra time/penalties in leg 2
+        let winner;
+        if (team1Total > team2Total) {
+          winner = semi.team1;
+        } else if (team2Total > team1Total) {
+          winner = semi.team2;
+        } else {
+          // Aggregate tied - check away goals
+          const team1AwayGoals = leg2.away;
+          const team2AwayGoals = leg1.away;
+          
+          if (team2AwayGoals > team1AwayGoals) {
+            // Team 2 wins on away goals
+            winner = semi.team2;
+          } else if (team1AwayGoals > team2AwayGoals) {
+            // Team 1 wins on away goals
+            winner = semi.team1;
+          } else {
+            // Still tied - simulate extra time/penalties in leg 2
+            // Give slight advantage to team playing at home in leg 2 (team1)
+            const extraTime = simulatePlayoffLeg(team2Rating, team1Rating, true);
+            winner = extraTime.home > extraTime.away ? semi.team2 : semi.team1;
+          }
+        }
         
         return {
           team1: semi.team1.team,
@@ -2667,10 +2742,8 @@ function endSeason() {
       const final2Rating = finalist2.isPlayer ? calculateTeamRating(gameState.squad) : finalist2.rating;
       
       const finalMatch = simulatePlayoffLeg(final1Rating, final2Rating, true);
-      const finalWinner = finalMatch.home > finalMatch.away ? finalist1 : 
-                        finalMatch.away > finalMatch.home ? finalist2 : 
-                        Math.random() > 0.5 ? finalist1 : finalist2;
-      
+      const finalWinner = finalMatch.home > finalMatch.away ? finalist1 : finalist2;
+
       const finalResult = {
         team1: finalist1.team,
         team2: finalist2.team,
@@ -2759,7 +2832,7 @@ function endSeason() {
   }
 
   // Check for immediate bankruptcy (below -£10) OR 2 consecutive seasons in debt
-  if (newBalance < -10000000) {
+  if (newBalance < -20000000) {
     deleteSave();
     setGameOverReason({
       reason: 'bankruptcy',
@@ -2798,7 +2871,7 @@ function endSeason() {
   setGameState(prev => ({
     ...prev,
     squad: squadAfterRetirements,
-    league: promoted ? Math.max(1, prev.league - 1) : (relegated ? Math.min(5, prev.league + 1) : prev.league),
+    //league: promoted ? Math.max(1, prev.league - 1) : (relegated ? Math.min(5, prev.league + 1) : prev.league),
     season: prev.season + 1,
     matchday: 0,
     money: newBalance,
@@ -2851,7 +2924,10 @@ function endSeason() {
     lastSeasonFinish: { 
     ...playerStanding, 
     message, 
-    league: gameState.league, 
+    league: gameState.league, // Store OLD league
+    newLeague: promoted ? Math.max(1, prev.league - 1) : (relegated ? Math.min(5, prev.league + 1) : prev.league),
+    promoted: promoted, // Store promotion status
+    relegated: relegated, // Store relegation status
     revenue: totalRevenue,
     tvRevenue,
     ticketRevenue,
@@ -2884,8 +2960,8 @@ function simulatePlayoffLeg(homeRating, awayRating, isFinal = false) {
   let homeGoals = Math.floor(homeExpectedGoals + (Math.random() > 0.7 ? 1 : 0));
   let awayGoals = Math.floor(awayExpectedGoals + (Math.random() > 0.7 ? 1 : 0));
   
-  // If it's a draw in a single-leg match (final), go to extra time/penalties
-  if (isFinal && homeGoals === awayGoals) {
+  // If it's a draw in ANY playoff match, go to extra time/penalties
+  if (homeGoals === awayGoals) {
     // Extra time - reduced scoring
     const extraTimeHome = Math.random() < 0.25 ? 1 : 0; // 25% chance to score
     const extraTimeAway = Math.random() < 0.25 ? 1 : 0;
@@ -3060,14 +3136,14 @@ function startNewSeason() {
     };
   });
 
-  // Generate new standings with realistic promotion/relegation
+  // NOW apply the league change from lastSeasonFinish
   const oldLeague = gameState.lastSeasonFinish ? (gameState.lastSeasonFinish.league || gameState.league) : gameState.league;
-  const newLeague = gameState.league;
+  const newLeague = gameState.lastSeasonFinish?.newLeague || gameState.league;
   const leagueData = LEAGUES[newLeague];
 
   // Update league membership based on last season's results
-let updatedMembership = gameState.leagueMembership;
-let updatedRatings = gameState.teamRatings; // ADD THIS - initialize with current ratings
+  let updatedMembership = gameState.leagueMembership;
+  let updatedRatings = gameState.teamRatings;
 
 if (gameState.lastSeasonFinish && gameState.standings) {
   // Determine what league the player was in LAST season
@@ -3118,6 +3194,7 @@ const newStandings = generateStandingsFromMembership(newLeague, gameState.teamNa
 
   setGameState(prev => ({
     ...prev,
+    league: newLeague,
     squad: updatedSquad,
     standings: newStandings,
     leagueMembership: updatedMembership, // Store updated membership
@@ -3918,7 +3995,9 @@ function listPlayerForTransfer(player, askingPrice) {
     
     return { 
       success: true, 
-      message: `Offer received: £${(counterOffer / 1000).toFixed(0)}k (${playerQualityForLeague} player for this league)`, 
+      message: counterOffer === 0 
+        ? `Offer received: Free transfer (${playerQualityForLeague} player for this league)` 
+        : `Offer received: £${(counterOffer / 1000).toFixed(0)}k (${playerQualityForLeague} player for this league)`, 
       counterOffer 
     };
   } else {
@@ -4194,6 +4273,18 @@ useEffect(() => {
   }
 }, [view]);
 
+// Auto-dismiss notifications after 7 seconds
+useEffect(() => {
+  if (freeAgentMessage || transferMessage) {
+    const timer = setTimeout(() => {
+      setFreeAgentMessage(null);
+      setTransferMessage(null);
+    }, 7000);
+    
+    return () => clearTimeout(timer);
+  }
+}, [freeAgentMessage, transferMessage]);
+
 const leagueData = gameState ? LEAGUES[gameState.league] : null;
 const totalMatches = leagueData ? (leagueData.teams - 1) * 2 : 0;
 const weeklyWages = gameState ? gameState.squad.reduce((sum, p) => sum + p.salary, 0) / 52 : 0;
@@ -4415,6 +4506,7 @@ if (view === 'freeagents') {
         </div>
 
         {freeAgentMessage && (
+        <div className="notification-modal">
           <div className={`message-card ${freeAgentMessage.accepted ? 'message-success' : 'message-error'}`}>
             <div className="message-title">
               {freeAgentMessage.walkedAway ? (
@@ -4462,7 +4554,8 @@ if (view === 'freeagents') {
               Dismiss
             </button>
           </div>
-        )}
+        </div>
+      )}
 
         <div className="player-list">
           {gameState.freeAgents.filter(p => p.status !== 'accepted').map(player => (
@@ -4814,19 +4907,37 @@ if (view === 'contracts') {
           </div>
         </div>
 
-        {freeAgentMessage && freeAgentMessage.isRenewal && (
+        {freeAgentMessage && (
+        <div className="notification-modal">
           <div className={`message-card ${freeAgentMessage.accepted ? 'message-success' : 'message-error'}`}>
             <div className="message-title">
               {freeAgentMessage.accepted 
-                ? `✓ ${freeAgentMessage.player} has accepted the contract renewal!`
-                : `✗ ${freeAgentMessage.player} has rejected your offer. Make a counter-offer below!`}
+                ? `✓ ${freeAgentMessage.player} has joined the first team from the academy!`
+                : freeAgentMessage.walkedAway
+                ? `✗ ${freeAgentMessage.player} has walked away from negotiations!`
+                : `✗ ${freeAgentMessage.player} has rejected your offer.`}
             </div>
-            {freeAgentMessage.marketValue && !freeAgentMessage.accepted && (
+            {freeAgentMessage.walkedAway && (
+              <div className="message-details text-walk-away">
+                Player has ended negotiations after {freeAgentMessage.rejectionCount} rejected offers.
+              </div>
+            )}
+            {freeAgentMessage.agreedSalary && (
+              <div className="message-details">
+                <span className="text-success">
+                  Agreed Terms: £{(freeAgentMessage.agreedSalary / 1000).toFixed(0)}k/year
+                </span>
+              </div>
+            )}
+            {freeAgentMessage.marketValue && !freeAgentMessage.accepted && !freeAgentMessage.walkedAway && (
               <div className="message-details text-warning">
                 Your Offer: £{(freeAgentMessage.offer / 1000).toFixed(0)}k/year | 
                 Player Counteroffer: £{(freeAgentMessage.marketValue / 1000).toFixed(0)}k/year
-                {freeAgentMessage.offer < freeAgentMessage.marketValue && 
-                  ` (you offered ${Math.round((freeAgentMessage.offer / freeAgentMessage.marketValue) * 100)}%)`}
+                {freeAgentMessage.rejectionLimit && (
+                  <span className="text-danger">
+                    {' | '}Rejection {freeAgentMessage.rejectionCount}/{freeAgentMessage.rejectionLimit}
+                  </span>
+                )}
               </div>
             )}
             <button 
@@ -4836,7 +4947,8 @@ if (view === 'contracts') {
               Dismiss
             </button>
           </div>
-        )}
+        </div>
+      )}
 
         {gameState.contractNegotiations.length === 0 ? (
           <div className="empty-state-card">
@@ -5022,6 +5134,7 @@ if (view === 'transfers') {
         </div>
 
         {transferMessage && (
+        <div className="notification-modal">
           <div className={`message-card ${transferMessage.success ? 'message-success' : 'message-error'}`}>
             <div className="message-title">{transferMessage.message}</div>
             {transferMessage.counterOffer && (
@@ -5034,7 +5147,8 @@ if (view === 'transfers') {
               Dismiss
             </button>
           </div>
-        )}
+        </div>
+      )}
 
         {/* Active Transfer Offers */}
         {gameState.transferOffers.length > 0 && (
@@ -5251,138 +5365,164 @@ if (view === 'academy') {
         ) : (
           <div className="player-list">
             {gameState.academyPlayers.map(player => (
-              <div key={player.id} className={`player-card ${player.status === 'rejected' ? 'player-rejected' : player.status === 'accepted' ? 'player-accepted' : ''}`}>
-                <div className="player-header">
-                  <div className="player-info">
-                    <div className="player-name-row">
-                      <span className="player-name">{player.name}</span>
-                      <span className="badge badge-position">{player.position}</span>
-                      <span className={`player-rating rating-${player.rating >= 70 ? 'high' : player.rating >= 60 ? 'medium' : 'low'}`}>
-                        {player.rating} OVR
-                      </span>
-                      <span className="player-age">Age: {player.age}</span>
-                      <span className="badge badge-success">Academy Graduate</span>
-                      {player.status === 'rejected' && (
-                        <span className="badge badge-danger">Previously Rejected</span>
-                      )}
-                      {player.status === 'accepted' && (
-                        <span className="badge badge-success">✓ Promoted to First Team</span>
-                      )}
-                    </div>
-                    <div className="player-stats">
-                      <div>PAC: {player.stats.pace}</div>
-                      <div>SHO: {player.stats.shooting}</div>
-                      <div>PAS: {player.stats.passing}</div>
-                      <div>DEF: {player.stats.defending}</div>
-                      <div>PHY: {player.stats.physical}</div>
-                    </div>
-                  </div>
-                  <div className="player-actions">
-                    <div className="player-salary">
-                      £{(player.salary / 1000).toFixed(0)}k/year
-                    </div>
-                    {player.status !== 'accepted' && (
-                      <button
-                        onClick={() => setSelectedPlayer(player)}
-                        className="btn btn-success btn-bold"
-                      >
-                        Promote to First Team
-                      </button>
+            <div key={player.id} className={`player-card ${
+              player.status === 'rejected' ? 'player-rejected' : 
+              player.status === 'accepted' ? 'player-accepted' : 
+              player.status === 'walked_away' ? 'player-rejected' : ''
+            }`}>
+              <div className="player-header">
+                <div className="player-info">
+                  <div className="player-name-row">
+                    <span className="player-name">{player.name}</span>
+                    <span className="badge badge-position">{player.position}</span>
+                    <span className={`player-rating rating-${player.rating >= 70 ? 'high' : player.rating >= 60 ? 'medium' : 'low'}`}>
+                      {player.rating} OVR
+                    </span>
+                    <span className="player-age">Age: {player.age}</span>
+                    <span className="badge badge-success">Academy Graduate</span>
+                    {player.status === 'rejected' && (
+                      <span className="badge badge-danger">Previously Rejected</span>
                     )}
+                    {player.status === 'walked_away' && (
+                      <span className="badge badge-danger">Walked Away</span>
+                    )}
+                    {player.status === 'accepted' && (
+                      <span className="badge badge-success">✓ Promoted to First Team</span>
+                    )}
+                  </div>
+                  <div className="player-stats">
+                    <div>PAC: {player.stats.pace}</div>
+                    <div>SHO: {player.stats.shooting}</div>
+                    <div>PAS: {player.stats.passing}</div>
+                    <div>DEF: {player.stats.defending}</div>
+                    <div>PHY: {player.stats.physical}</div>
                   </div>
                 </div>
+                <div className="player-actions">
+                  <div className="player-salary">
+                    £{(player.salary / 1000).toFixed(0)}k/year
+                  </div>
+                  {player.status !== 'accepted' && player.status !== 'walked_away' && (
+                    <button
+                      onClick={() => setSelectedPlayer(player)}
+                      className="btn btn-success btn-bold"
+                    >
+                      Promote to First Team
+                    </button>
+                  )}
+                </div>
+              </div>
 
-                {selectedPlayer?.id === player.id && player.status !== 'accepted' && (
-                  <div className="contract-offer-section">
-                    <h3 className="section-title">First Team Contract Offer</h3>
-                    
-                    {player.status === 'rejected' && player.offer && player.marketValue && (
-                      <div className="rejection-notice">
-                        <div className="rejection-title">⚠️ Contract Rejected:</div>
-                        <div>Your Offer: £{(player.offer.salary / 1000).toFixed(0)}k/year for {player.offer.years} years</div>
-                        <div className="text-warning">
-                          Player Counteroffer: £{(player.marketValue / 1000).toFixed(0)}k/year
-                          (you offered {Math.round((player.offer.salary / player.marketValue) * 100)}%)
+              {selectedPlayer?.id === player.id && player.status !== 'accepted' && player.status !== 'walked_away' && (
+                <div className="contract-offer-section">
+                  <h3 className="section-title">First Team Contract Offer</h3>
+                  
+                  {player.status === 'rejected' && player.offer && player.marketValue && (
+                    <div className="rejection-notice">
+                      <div className="rejection-title">⚠️ Contract Rejected:</div>
+                      <div>Your Offer: £{(player.offer.salary / 1000).toFixed(0)}k/year for {player.offer.years} years</div>
+                      <div className="text-warning">
+                        Player Counteroffer: £{(player.marketValue / 1000).toFixed(0)}k/year
+                        (you offered {Math.round((player.offer.salary / player.marketValue) * 100)}%)
+                      </div>
+                      {player.rejectionLimit && (
+                        <div className="text-danger">
+                          Rejections: {player.rejectionCount}/{player.rejectionLimit}
+                          {player.rejectionCount >= player.rejectionLimit - 1 && ' - Final offer!'}
                         </div>
-                        <div className="rejection-hint">Increase your salary offer</div>
-                      </div>
-                    )}
-                    
-                    <div className="form-grid">
-                      <div className="form-group">
-                        <label>Contract Length (years)</label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="5"
-                          value={contractOffer.years}
-                          onChange={(e) => setContractOffer(prev => ({ ...prev, years: parseInt(e.target.value) }))}
-                          className="form-input"
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label>Annual Salary (£000s)</label>
-                        <input
-                          type="number"
-                          min="10"
-                          step="5"
-                          placeholder="0"
-                          value={
-                            contractOffer.salary === "" 
-                              ? "" 
-                              : Math.round((contractOffer.salary || player.salary) / 1000)
+                      )}
+                      <div className="rejection-hint">Increase your salary offer</div>
+                    </div>
+                  )}
+                  
+                  <div className="form-grid">
+                    <div className="form-group">
+                      <label>Contract Length (years)</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="5"
+                        value={contractOffer.years}
+                        onChange={(e) => setContractOffer(prev => ({ ...prev, years: parseInt(e.target.value) }))}
+                        className="form-input"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Annual Salary (£000s)</label>
+                      <input
+                        type="number"
+                        min="10"
+                        step="5"
+                        placeholder="0"
+                        value={
+                          contractOffer.salary === "" 
+                            ? "" 
+                            : Math.round((contractOffer.salary || player.salary) / 1000)
+                        }
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (v === "") {
+                            setContractOffer(prev => ({ ...prev, salary: "" }));
+                            return;
                           }
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            if (v === "") {
-                              setContractOffer(prev => ({ ...prev, salary: "" }));
-                              return;
-                            }
-                            const thousands = parseInt(v, 10);
-                            if (!isNaN(thousands)) {
-                              setContractOffer(prev => ({ ...prev, salary: thousands * 1000 }));
-                            }
-                          }}
-                          className="form-input"
-                        />
-                        <div className="form-hint">
-                          Enter amount in thousands (e.g., 65 = £65,000/year)
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="contract-summary">
-                      <strong>Contract Terms:</strong>
-                      <br />
-                      Annual Salary: £{((contractOffer.salary || player.salary) / 1000).toFixed(0)}k/year
-                      <br />
-                      Total Contract Value: £{((contractOffer.salary || player.salary) * contractOffer.years / 1000).toFixed(0)}k
-                      <br />
-                      <span className="text-success">✓ No Transfer Fee Required</span>
-                    </div>
-                    
-                    <div className="button-group">
-                      <button
-                        onClick={() => {
-                          const salary = contractOffer.salary || player.salary;
-                          const years = contractOffer.years;
-                          offerContractToAcademyPlayer(player, years, salary);
+                          const thousands = parseInt(v, 10);
+                          if (!isNaN(thousands)) {
+                            setContractOffer(prev => ({ ...prev, salary: thousands * 1000 }));
+                          }
                         }}
-                        className="btn btn-primary btn-bold"
-                      >
-                        Submit Offer
-                      </button>
-                      <button
-                        onClick={() => setSelectedPlayer(null)}
-                        className="btn btn-secondary"
-                      >
-                        Cancel
-                      </button>
+                        className="form-input"
+                      />
+                      <div className="form-hint">
+                        Enter amount in thousands (e.g., 65 = £65,000/year)
+                      </div>
                     </div>
                   </div>
-                )}
-              </div>
-            ))}
+                  
+                  <div className="contract-summary">
+                    <strong>Contract Terms:</strong>
+                    <br />
+                    Annual Salary: £{((contractOffer.salary || player.salary) / 1000).toFixed(0)}k/year
+                    <br />
+                    Total Contract Value: £{((contractOffer.salary || player.salary) * contractOffer.years / 1000).toFixed(0)}k
+                    <br />
+                    <span className="text-success">✓ No Transfer Fee Required</span>
+                  </div>
+                  
+                  <div className="button-group">
+                    <button
+                      onClick={() => {
+                        const salary = contractOffer.salary || player.salary;
+                        const years = contractOffer.years;
+                        offerContractToAcademyPlayer(player, years, salary);
+                      }}
+                      className="btn btn-primary btn-bold"
+                    >
+                      Submit Offer
+                    </button>
+                    <button
+                      onClick={() => setSelectedPlayer(null)}
+                      className="btn btn-secondary"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Add walked away notice */}
+              {player.status === 'walked_away' && (
+                <div className="contract-offer-section">
+                  <div className="rejection-notice">
+                    <div className="rejection-title">🚫 Player Has Ended Negotiations</div>
+                    <div className="text-danger">
+                      {player.name} walked away after {player.rejectionCount} rejected offers.
+                      They have declined to join the first team and will remain in the academy.
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
           </div>
         )}
       </div>
@@ -5451,7 +5591,6 @@ return (
           </div>
         )}
 
-        {/* Controls */}
         <div className="controls">
         {gameState.seasonPhase === 'regular' && (
           <>
@@ -5480,8 +5619,36 @@ return (
                 End Season
               </button>
             )}
+            
+            {/* Transfer Market Button - only show during mid-season window */}
+            {gameState.isTransferWindow && (
+              <button
+                onClick={() => {
+                  setGameState(prev => ({ ...prev, paused: true }));
+                  setView('transfers');
+                }}
+                className="btn btn-warning btn-bold btn-pulse"
+              >
+                <DollarSign size={20} />
+                Transfer Market (OPEN)
+              </button>
+            )}
+            
+            {/* Buy Players - available during regular season */}
+            <button
+              onClick={() => {
+                setSelectedPlayer(null);
+                setFreeAgentMessage(null);
+                setView('freeagents');
+              }}
+              className="btn btn-primary btn-bold"
+            >
+              <UserPlus size={20} />
+              Transfers (Buy Players)
+            </button>
           </>
         )}
+        
         {gameState.seasonPhase === 'preseason-transfers' && (
           <>
             <button
@@ -5496,9 +5663,9 @@ return (
                   seasonPhase: 'regular',
                   isTransferWindow: false,
                   transferPhase: 'emergency',
-                  transferOffers: [], // Clear any pending offers
+                  transferOffers: [],
                   freeAgents: generateFreeAgentsByPhase(prev.league, prev.reputation, 'emergency'),
-                  paused: false // Start immediately
+                  paused: false
                 }));
               }}
               className="btn btn-success btn-bold"
@@ -5517,23 +5684,35 @@ return (
               Pre-Season Transfers (Sell Players)
             </button>
             
+            {/* Transfers button - only during preseason */}
+            <button
+              onClick={() => {
+                setSelectedPlayer(null);
+                setFreeAgentMessage(null);
+                setView('freeagents');
+              }}
+              className="btn btn-primary btn-bold"
+            >
+              <UserPlus size={20} />
+              Transfers (Buy Players)
+            </button>
             
+            {/* Academy button */}
+            {gameState.facilities.find(f => f.name === 'Youth Academy').level >= 1 && gameState.academyPlayers.length > 0 && (
+              <button
+                onClick={() => {
+                  setGameState(prev => ({ ...prev, paused: true }));
+                  setView('academy');
+                }}
+                className="btn btn-purple btn-bold"
+              >
+                <Users size={20} />
+                Academy Prospects ({gameState.academyPlayers.length})
+              </button>
+            )}
           </>
         )}
-        {/* NEW: Transfer Window Button */}
-        {gameState.isTransferWindow && gameState.seasonPhase === 'regular' && (
-          <button
-            onClick={() => {
-              setGameState(prev => ({ ...prev, paused: true })); // Pause the season
-              setView('transfers');
-            }}
-            className="btn btn-warning btn-bold btn-pulse"
-          >
-            <DollarSign size={20} />
-            Transfer Market (OPEN)
-          </button>
-        )}
-
+        
         {gameState.seasonPhase === 'offseason' && (
           <button
             onClick={() => setView('contracts')}
@@ -5544,32 +5723,7 @@ return (
           </button>
         )}
         
-        <button
-          onClick={() => {
-            setSelectedPlayer(null);
-            setFreeAgentMessage(null);
-            setView('freeagents');
-          }}
-          className="btn btn-primary btn-bold"
-        >
-          <UserPlus size={20} />
-          Transfers (Buy Players)
-        </button>
-
-        {/* Add this new button */}
-        {gameState.facilities.find(f => f.name === 'Youth Academy').level >= 1 && gameState.academyPlayers.length > 0 && (
-          <button
-            onClick={() => {
-              setGameState(prev => ({ ...prev, paused: true }));
-              setView('academy');
-            }}
-            className="btn btn-purple btn-bold"
-          >
-            <Users size={20} />
-            Academy Prospects ({gameState.academyPlayers.length})
-          </button>
-        )}
-        
+        {/* Standings button - always available */}
         <button
           onClick={() => {
             setSelectedPlayer(null);
@@ -5590,68 +5744,77 @@ return (
           <p className="season-result-message">{gameState.lastSeasonFinish.message}</p>
           
           {gameState.lastSeasonFinish.playoffDetails && (
-            <div className="playoff-details">
-              <h3 className="section-title">Playoff Results - {gameState.lastSeasonFinish.playoffDetails.stage}</h3>
-              <div className="playoff-results">
-                {gameState.lastSeasonFinish.playoffDetails.results.map((result, idx) => {
-                  // Determine round label based on number of matches
-                  const totalMatches = gameState.lastSeasonFinish.playoffDetails.results.length;
-                  let roundLabel;
-                  
-                  if (totalMatches === 5) {
-                    // National League: 2 quarters + 2 semis + 1 final
-                    if (idx < 2) roundLabel = `Quarter-Final ${idx + 1}`;
-                    else if (idx < 4) roundLabel = `Semi-Final ${idx - 1}`;
-                    else roundLabel = 'FINAL';
-                  } else if (totalMatches === 3) {
-                    // League Two/One/Championship: 2 semis + 1 final
-                    if (idx < 2) roundLabel = `Semi-Final ${idx + 1}`;
-                    else roundLabel = 'FINAL';
-                  } else {
-                    roundLabel = 'Match';
-                  }
-                  
-                  // Check if this is a final (single leg) OR a single-leg match
-                  const isFinal = idx === totalMatches - 1;
-                  const isTwoLegs = result.leg1Score && result.leg2Score && result.aggregate;
-                  
-                  return (
-                    <div key={idx} className="playoff-match">
-                      <div className="playoff-round">
-                        {roundLabel}
+          <div className="playoff-details">
+            <h3 className="section-title">Playoff Results - {gameState.lastSeasonFinish.playoffDetails.stage}</h3>
+            <div className="playoff-results">
+              {gameState.lastSeasonFinish.playoffDetails.results.map((result, idx) => {
+                // Determine round label based on number of matches
+                const totalMatches = gameState.lastSeasonFinish.playoffDetails.results.length;
+                let roundLabel;
+                
+                if (totalMatches === 5) {
+                  // National League: 2 quarters + 2 semis + 1 final
+                  if (idx < 2) roundLabel = `Quarter-Final ${idx + 1}`;
+                  else if (idx < 4) roundLabel = `Semi-Final ${idx - 1}`;
+                  else roundLabel = 'FINAL';
+                } else if (totalMatches === 3) {
+                  // League Two/One/Championship: 2 semis + 1 final
+                  if (idx < 2) roundLabel = `Semi-Final ${idx + 1}`;
+                  else roundLabel = 'FINAL';
+                } else {
+                  roundLabel = 'Match';
+                }
+                
+                // Check if this is a final (single leg) OR a single-leg match
+                const isFinal = idx === totalMatches - 1;
+                const isTwoLegs = result.leg1Score && result.leg2Score && result.aggregate;
+                
+                return (
+                  <div key={idx} className="playoff-match">
+                    <div className="playoff-round">
+                      {roundLabel}
+                    </div>
+                    <div className="playoff-match-details">
+                      <div className={`playoff-team-left ${result.team1 === gameState.teamName ? 'text-bold text-primary' : ''}`}>
+                        {result.team1}
                       </div>
-                      <div className="playoff-match-details">
-                        <div className={result.team1 === gameState.teamName ? 'text-bold text-primary' : ''}>
-                          {result.team1}
-                        </div>
-                        <div className="playoff-scores">
-                          {isTwoLegs ? (
-                            // Two-legged tie - show both legs and aggregate
-                            <>
-                              <div>Leg 1: {result.leg1Score}</div>
-                              <div>Leg 2: {result.leg2Score}</div>
-                              <div className="playoff-aggregate">Agg: {result.aggregate}</div>
-                            </>
-                          ) : (
-                            // Single leg match - just show the score
-                            <div className="playoff-final-score">{result.score}</div>
-                          )}
-                        </div>
-                        <div className={result.team2 === gameState.teamName ? 'text-bold text-primary' : ''}>
-                          {result.team2}
-                        </div>
+                      <div className="playoff-scores">
+                        {isTwoLegs ? (
+                          // Two-legged tie - show both legs and aggregate
+                          <>
+                            <div className="playoff-leg-scores">
+                              <span className="playoff-leg-label">Leg 1:</span>
+                              <span className="playoff-score">{result.leg1Score}</span>
+                            </div>
+                            <div className="playoff-leg-scores">
+                              <span className="playoff-leg-label">Leg 2:</span>
+                              <span className="playoff-score">{result.leg2Score}</span>
+                            </div>
+                            <div className="playoff-aggregate">
+                              <span className="playoff-leg-label">Aggregate:</span>
+                              <span className="playoff-score">{result.aggregate}</span>
+                            </div>
+                          </>
+                        ) : (
+                          // Single leg match - just show the score
+                          <div className="playoff-final-score">{result.score}</div>
+                        )}
                       </div>
-                      <div className="playoff-winner">
-                        Winner: <span className={result.winner === gameState.teamName ? 'text-success' : ''}>
-                          {result.winner}
-                        </span>
+                      <div className={`playoff-team-right ${result.team2 === gameState.teamName ? 'text-bold text-primary' : ''}`}>
+                        {result.team2}
                       </div>
                     </div>
-                  );
-                })}
-              </div>
+                    <div className="playoff-winner">
+                      Winner: <span className={result.winner === gameState.teamName ? 'text-success' : ''}>
+                        {result.winner}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          )}
+          </div>
+        )}
 
           
           <div className="season-finances">
@@ -5843,7 +6006,7 @@ return (
             </div>
           </div>
 
-          {/* Add this legend section */}
+          {/* Squad legend with formation */}
           <div className="squad-legend">
             <div className="squad-legend-item">
               <div className="squad-legend-box squad-legend-starter"></div>
@@ -5853,8 +6016,57 @@ return (
               <div className="squad-legend-box squad-legend-bench"></div>
               <span>Bench / Reserves</span>
             </div>
+            <div className="squad-formation">
+              Formation: {(() => {
+                // Get the formation being used
+                const gks = gameState.squad.filter(p => p.position === 'GK').sort((a, b) => b.rating - a.rating);
+                const defs = gameState.squad.filter(p => p.position === 'DEF').sort((a, b) => b.rating - a.rating);
+                const mids = gameState.squad.filter(p => p.position === 'MID').sort((a, b) => b.rating - a.rating);
+                const fwds = gameState.squad.filter(p => p.position === 'FWD').sort((a, b) => b.rating - a.rating);
+                
+                const formations = [
+                  [4, 4, 2],
+                  [4, 3, 3],
+                  [4, 5, 1],
+                  [5, 4, 1],
+                  [5, 3, 2],
+                  [3, 5, 2],
+                  [3, 4, 3]
+                ];
+                
+                let bestFormation = null;
+                let bestRating = 0;
+                
+                formations.forEach(([numDef, numMid, numFwd]) => {
+                  if (gks.length < 1 || defs.length < numDef || 
+                      mids.length < numMid || fwds.length < numFwd) {
+                    return;
+                  }
+                  
+                  const starter_gk = gks[0];
+                  const starter_defs = defs.slice(0, numDef);
+                  const starter_mids = mids.slice(0, numMid);
+                  const starter_fwds = fwds.slice(0, numFwd);
+                  
+                  const allStarters = [starter_gk, ...starter_defs, ...starter_mids, ...starter_fwds];
+                  const formationRating = allStarters.reduce((sum, p) => sum + p.rating, 0) / 11;
+                  
+                  if (formationRating > bestRating) {
+                    bestRating = formationRating;
+                    bestFormation = {
+                      formation: [numDef, numMid, numFwd]
+                    };
+                  }
+                });
+                
+                if (!bestFormation) {
+                  return '4-4-2'; // Default fallback
+                }
+                
+                return `${bestFormation.formation[0]}-${bestFormation.formation[1]}-${bestFormation.formation[2]}`;
+              })()}
+            </div>
           </div>
-          
           <div className="squad-list">
           {POSITIONS.map(pos => {
             const posPlayers = gameState.squad

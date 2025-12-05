@@ -353,59 +353,110 @@
     font-size: 20px;
   }
   /* Playoff Details */
-  .playoff-details {
-    background: rgba(0, 0, 0, 0.4);
-    border-radius: 0.5rem;
-    padding: 1rem;
-    margin-bottom: 1rem;
-  }
-  
-  .playoff-results {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-  
-  .playoff-match {
-    background: rgba(31, 41, 55, 0.5);
-    padding: 0.75rem;
-    border-radius: 0.375rem;
-  }
-  
-  .playoff-round {
-    font-weight: bold;
-    margin-bottom: 0.5rem;
-    color: #fcd34d;
-  }
-  
-  .playoff-match-details {
-    display: grid;
-    grid-template-columns: 1fr auto 1fr;
-    gap: 0.5rem;
-    font-size: 0.875rem;
-    align-items: center;
-  }
-  
-  .playoff-scores {
-    text-align: center;
-  }
-  
-  .playoff-aggregate {
-    font-weight: bold;
-    color: #4ade80;
-    margin-top: 0.25rem;
-  }
-  
-  .playoff-winner {
-    text-align: center;
-    margin-top: 0.5rem;
-    font-weight: bold;
-  }
-  .playoff-final-score {
-    font-weight: bold;
-    font-size: 1.25rem;
-    color: #4ade80;
-  }
+.playoff-details {
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.playoff-results {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.playoff-match {
+  background: rgba(31, 41, 55, 0.5);
+  padding: 0.75rem;
+  border-radius: 0.375rem;
+}
+
+.playoff-round {
+  font-weight: bold;
+  margin-bottom: 0.5rem;
+  color: #fcd34d;
+  text-align: center;
+}
+
+.playoff-match-details {
+  display: grid;
+  grid-template-columns: 2fr auto 2fr;
+  gap: 1rem;
+  font-size: 0.875rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.playoff-team-left {
+  text-align: right;
+  padding-right: 0.5rem;
+}
+
+.playoff-team-right {
+  text-align: left;
+  padding-left: 0.5rem;
+}
+
+.playoff-scores {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  text-align: center;
+  min-width: 120px;
+  padding: 0.5rem;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 0.375rem;
+}
+
+.playoff-leg-scores {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.playoff-leg-label {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  min-width: 60px;
+}
+
+.playoff-score {
+  font-weight: bold;
+  color: #e2e8f0;
+  min-width: 30px;
+  text-align: center;
+}
+
+.playoff-aggregate {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.playoff-aggregate .playoff-score {
+  color: #4ade80;
+  font-size: 1.125rem;
+}
+
+.playoff-winner {
+  text-align: center;
+  margin-top: 0.5rem;
+  font-weight: bold;
+  font-size: 0.875rem;
+}
+
+.playoff-final-score {
+  font-weight: bold;
+  font-size: 1.5rem;
+  color: #4ade80;
+  text-align: center;
+}
   
   /* Main Grid */
   .main-grid {
@@ -481,6 +532,15 @@
 
 .squad-legend-bench {
   background: rgba(31, 41, 55, 0.7);
+}
+
+.squad-formation {
+  margin-left: auto;
+  font-weight: bold;
+  color: #fcd34d;
+  padding: 0.25rem 0.75rem;
+  background: rgba(252, 211, 77, 0.1);
+  border-radius: 0.375rem;
 }
 
 /* Existing starter highlighting styles */
@@ -823,6 +883,57 @@
     font-size: 1.25rem;
     font-weight: bold;
     margin-bottom: 0.5rem;
+  }
+
+  /* Fixed notification modal - top right corner */
+  .notification-modal {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+    width: 400px;
+    max-width: calc(100vw - 40px);
+    animation: slideInRight 0.3s ease-out;
+  }
+
+  .notification-modal.fade-out {
+    animation: fadeOut 0.5s ease-out forwards;
+  }
+
+  @keyframes slideInRight {
+    from {
+      opacity: 0;
+      transform: translateX(100px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes fadeOut {
+    from {
+      opacity: 1;
+      transform: translateX(0);
+    }
+    to {
+      opacity: 0;
+      transform: translateX(100px);
+    }
+  }
+
+  .notification-modal .message-card {
+    margin-bottom: 0;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+  }
+
+  /* Responsive positioning */
+  @media (max-width: 768px) {
+    .notification-modal {
+      top: 10px;
+      right: 10px;
+      width: calc(100vw - 20px);
+    }
   }
   
   /* Contract Offer Section */
