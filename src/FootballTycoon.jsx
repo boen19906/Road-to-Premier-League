@@ -2364,7 +2364,7 @@ function endSeason() {
       const team2Rating = qf.team2.isPlayer ? calculateTeamRating(gameState.squad) : qf.team2.rating;
       
       // Single leg match - no draws possible
-      const match = simulatePlayoffLeg(team1Rating, team2Rating, true);
+      const match = simulatePlayoffLegf(team1Rating, team2Rating, true);
       
       return {
         team1: qf.team1.team,
@@ -2488,7 +2488,6 @@ function endSeason() {
         const team1Total = leg1.home + leg2.away;
         const team2Total = leg1.away + leg2.home;
         
-        // If aggregate is tied, determine winner by away goals or extra time/penalties in leg 2
         let winner;
         if (team1Total > team2Total) {
           winner = semi.team1;
@@ -2500,16 +2499,14 @@ function endSeason() {
           const team2AwayGoals = leg1.away;
           
           if (team2AwayGoals > team1AwayGoals) {
-            // Team 2 wins on away goals
             winner = semi.team2;
           } else if (team1AwayGoals > team2AwayGoals) {
-            // Team 1 wins on away goals
             winner = semi.team1;
           } else {
-            // Still tied - simulate extra time/penalties in leg 2
-            // Give slight advantage to team playing at home in leg 2 (team1)
-            const extraTime = simulatePlayoffLeg(team2Rating, team1Rating, true);
-            winner = extraTime.home > extraTime.away ? semi.team2 : semi.team1;
+            // STILL TIED - Force a winner based on rating with randomness
+            const totalRating = team1Rating + team2Rating;
+            const team1Chance = team1Rating / totalRating;
+            winner = Math.random() < team1Chance ? semi.team1 : semi.team2;
           }
         }
         
@@ -2593,7 +2590,6 @@ function endSeason() {
         const team1Total = leg1.home + leg2.away;
         const team2Total = leg1.away + leg2.home;
         
-        // If aggregate is tied, determine winner by away goals or extra time/penalties in leg 2
         let winner;
         if (team1Total > team2Total) {
           winner = semi.team1;
@@ -2605,16 +2601,14 @@ function endSeason() {
           const team2AwayGoals = leg1.away;
           
           if (team2AwayGoals > team1AwayGoals) {
-            // Team 2 wins on away goals
             winner = semi.team2;
           } else if (team1AwayGoals > team2AwayGoals) {
-            // Team 1 wins on away goals
             winner = semi.team1;
           } else {
-            // Still tied - simulate extra time/penalties in leg 2
-            // Give slight advantage to team playing at home in leg 2 (team1)
-            const extraTime = simulatePlayoffLeg(team2Rating, team1Rating, true);
-            winner = extraTime.home > extraTime.away ? semi.team2 : semi.team1;
+            // STILL TIED - Force a winner based on rating with randomness
+            const totalRating = team1Rating + team2Rating;
+            const team1Chance = team1Rating / totalRating;
+            winner = Math.random() < team1Chance ? semi.team1 : semi.team2;
           }
         }
         
@@ -2698,7 +2692,6 @@ function endSeason() {
         const team1Total = leg1.home + leg2.away;
         const team2Total = leg1.away + leg2.home;
         
-        // If aggregate is tied, determine winner by away goals or extra time/penalties in leg 2
         let winner;
         if (team1Total > team2Total) {
           winner = semi.team1;
@@ -2710,16 +2703,14 @@ function endSeason() {
           const team2AwayGoals = leg1.away;
           
           if (team2AwayGoals > team1AwayGoals) {
-            // Team 2 wins on away goals
             winner = semi.team2;
           } else if (team1AwayGoals > team2AwayGoals) {
-            // Team 1 wins on away goals
             winner = semi.team1;
           } else {
-            // Still tied - simulate extra time/penalties in leg 2
-            // Give slight advantage to team playing at home in leg 2 (team1)
-            const extraTime = simulatePlayoffLeg(team2Rating, team1Rating, true);
-            winner = extraTime.home > extraTime.away ? semi.team2 : semi.team1;
+            // STILL TIED - Force a winner based on rating with randomness
+            const totalRating = team1Rating + team2Rating;
+            const team1Chance = team1Rating / totalRating;
+            winner = Math.random() < team1Chance ? semi.team1 : semi.team2;
           }
         }
         
@@ -3550,7 +3541,6 @@ function offerContract(player, years, salary) {
   
   if (view === 'freeagents') {
     if (accepted) {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
       const newPlayer = { 
         ...player, 
         contractYears: years, 
@@ -3594,24 +3584,7 @@ function offerContract(player, years, salary) {
           } : p
         )
       }));
-      
-      if (reachedLimit) {
-        setFreeAgentMessage({ 
-          player: player.name, 
-          accepted: false, 
-          walkedAway: true,
-          rejectionCount: newRejectionCount
-        });
-      } else {
-        setFreeAgentMessage({ 
-          player: player.name, 
-          accepted: false, 
-          marketValue, 
-          offer: salary,
-          rejectionCount: newRejectionCount,
-          rejectionLimit: player.rejectionLimit
-        });
-      }
+      // No notification for rejection
     }
   } else if (view === 'contracts') {
     // Contract renewal - calculate rejection count first
@@ -3634,31 +3607,6 @@ function offerContract(player, years, salary) {
           : n
       )
     }));
-    
-    // Then set message
-    if (accepted) {
-      setFreeAgentMessage({ player: player.name, accepted: true, isRenewal: true, agreedSalary: salary });
-    } else {
-      if (reachedLimit) {
-        setFreeAgentMessage({ 
-          player: player.name, 
-          accepted: false, 
-          isRenewal: true,
-          walkedAway: true,
-          rejectionCount: newRejectionCount
-        });
-      } else {
-        setFreeAgentMessage({ 
-          player: player.name, 
-          accepted: false, 
-          isRenewal: true, 
-          marketValue, 
-          offer: salary,
-          rejectionCount: newRejectionCount,
-          rejectionLimit: player.rejectionLimit
-        });
-      }
-    }
   }
 }
 
@@ -3718,7 +3666,6 @@ function offerContractWithFee(player, years, salary, negotiatedTransferFee) {
   
   if (view === 'freeagents') {
     if (accepted) {
-      window.scrollTo({ top: 0, behavior: 'smooth' }); // Scroll to top
       const newPlayer = { 
         ...player, 
         contractYears: years, 
@@ -3792,7 +3739,6 @@ function offerContractToAcademyPlayer(player, years, salary) {
   const { accepted, marketValue, reachedLimit } = negotiateContract(player, { years, salary });
   
   if (accepted) {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
     const newPlayer = { 
       ...player, 
       contractYears: years, 
@@ -4087,10 +4033,7 @@ function upgradeFacility(facilityName) {
     cost = facilityCosts[facilityName][facility.level];
   }
   
-  if (gameState.money < cost) {
-    alert('Not enough money to upgrade!');
-    return;
-  }
+  
   
   const updatedFacilities = [...gameState.facilities];
   updatedFacilities[facilityIndex] = { ...facility, level: facility.level + 1 };
@@ -4744,7 +4687,8 @@ if (view === 'freeagents') {
                         
                         if (player.requiresTransferFee && player.transferFee) {
                           const feeInput = document.getElementById(`transfer-fee-${player.id}`);
-                          const negotiatedFee = (parseInt(feeInput?.value) || Math.round(player.transferFee / 1000)) * 1000;
+                          const feeInputValue = parseInt(feeInput?.value);
+                          const negotiatedFee = (!isNaN(feeInputValue) ? feeInputValue : Math.round(player.transferFee / 1000)) * 1000;
                           offerContractWithFee(player, years, salary, negotiatedFee);
                         } else {
                           offerContract(player, years, salary);
@@ -4911,18 +4855,20 @@ if (view === 'contracts') {
         <div className="notification-modal">
           <div className={`message-card ${freeAgentMessage.accepted ? 'message-success' : 'message-error'}`}>
             <div className="message-title">
-              {freeAgentMessage.accepted 
-                ? `✓ ${freeAgentMessage.player} has joined the first team from the academy!`
-                : freeAgentMessage.walkedAway
-                ? `✗ ${freeAgentMessage.player} has walked away from negotiations!`
-                : `✗ ${freeAgentMessage.player} has rejected your offer.`}
+              {freeAgentMessage.walkedAway ? (
+                `✗ ${freeAgentMessage.player} has walked away from negotiations!`
+              ) : freeAgentMessage.accepted ? (
+                `✓ ${freeAgentMessage.player} has accepted the contract renewal!`
+              ) : (
+                `✗ ${freeAgentMessage.player} has rejected your offer.`
+              )}
             </div>
             {freeAgentMessage.walkedAway && (
               <div className="message-details text-walk-away">
                 Player has ended negotiations after {freeAgentMessage.rejectionCount} rejected offers.
               </div>
             )}
-            {freeAgentMessage.agreedSalary && (
+            {freeAgentMessage.agreedSalary && !freeAgentMessage.walkedAway && (
               <div className="message-details">
                 <span className="text-success">
                   Agreed Terms: £{(freeAgentMessage.agreedSalary / 1000).toFixed(0)}k/year
@@ -4933,6 +4879,8 @@ if (view === 'contracts') {
               <div className="message-details text-warning">
                 Your Offer: £{(freeAgentMessage.offer / 1000).toFixed(0)}k/year | 
                 Player Counteroffer: £{(freeAgentMessage.marketValue / 1000).toFixed(0)}k/year
+                {freeAgentMessage.offer < freeAgentMessage.marketValue && 
+                  ` (you offered ${Math.round((freeAgentMessage.offer / freeAgentMessage.marketValue) * 100)}%)`}
                 {freeAgentMessage.rejectionLimit && (
                   <span className="text-danger">
                     {' | '}Rejection {freeAgentMessage.rejectionCount}/{freeAgentMessage.rejectionLimit}
@@ -5280,7 +5228,7 @@ if (view === 'transfers') {
                                 askingPrice
                               });
                               setSelectedPlayer(null);
-                              window.scrollTo({ top: 0, behavior: 'smooth' }); // Scroll to top
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
                             }}
                             className="btn btn-success btn-bold"
                           >
@@ -6179,10 +6127,9 @@ return (
                   </div>
                   <button
                     onClick={() => upgradeFacility(facility.name)}
-                    disabled={!canAfford || maxedOut}
                     className={`btn btn-small btn-bold ${
                       maxedOut ? 'btn-disabled' :
-                      canAfford ? 'btn-primary' : 'btn-disabled'
+                      canAfford ? 'btn-primary' : 'btn-primary'
                     }`}
                   >
                     {maxedOut ? 'MAX' : `£${(cost / 1000000).toFixed(2)}M`}
