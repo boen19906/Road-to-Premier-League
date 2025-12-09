@@ -4786,7 +4786,22 @@ if (view === 'freeagents') {
                         min="1"
                         max="5"
                         value={contractOffer.years}
-                        onChange={(e) => setContractOffer(prev => ({ ...prev, years: parseInt(e.target.value) }))}
+                        onChange={(e) => {
+                          const value = parseInt(e.target.value);
+                          if (value >= 1 && value <= 5) {
+                            setContractOffer(prev => ({ ...prev, years: value }));
+                          } else if (e.target.value === '') {
+                            setContractOffer(prev => ({ ...prev, years: 1 }));
+                          }
+                        }}
+                        onBlur={(e) => {
+                          const value = parseInt(e.target.value);
+                          if (isNaN(value) || value < 1) {
+                            setContractOffer(prev => ({ ...prev, years: 1 }));
+                          } else if (value > 5) {
+                            setContractOffer(prev => ({ ...prev, years: 5 }));
+                          }
+                        }}
                         className="form-input"
                         disabled={player.status === 'walked_away'}
                       />
@@ -5159,6 +5174,11 @@ if (view === 'contracts') {
                           defaultValue={player.offer?.years || 2}
                           id={`years-${player.id}`}
                           className="form-input"
+                          onBlur={(e) => {
+                            const value = parseInt(e.target.value);
+                            if (value > 5) e.target.value = 5;
+                            if (value < 1) e.target.value = 1;
+                          }}
                         />
                       </div>
                       <div className="form-group">
@@ -5570,7 +5590,22 @@ if (view === 'academy') {
                         min="1"
                         max="5"
                         value={contractOffer.years}
-                        onChange={(e) => setContractOffer(prev => ({ ...prev, years: parseInt(e.target.value) }))}
+                        onChange={(e) => {
+                          const value = parseInt(e.target.value);
+                          if (value >= 1 && value <= 5) {
+                            setContractOffer(prev => ({ ...prev, years: value }));
+                          } else if (e.target.value === '') {
+                            setContractOffer(prev => ({ ...prev, years: 1 }));
+                          }
+                        }}
+                        onBlur={(e) => {
+                          const value = parseInt(e.target.value);
+                          if (isNaN(value) || value < 1) {
+                            setContractOffer(prev => ({ ...prev, years: 1 }));
+                          } else if (value > 5) {
+                            setContractOffer(prev => ({ ...prev, years: 5 }));
+                          }
+                        }}
                         className="form-input"
                       />
                     </div>
