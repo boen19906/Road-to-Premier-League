@@ -157,7 +157,7 @@ const [transferMessage, setTransferMessage] = useState(null);
 
 const [view, setView] = useState('start'); // start, main, freeagents, standings, contracts, gameover, transfer, academy
 const [selectedPlayer, setSelectedPlayer] = useState(null);
-const [contractOffer, setContractOffer] = useState({ years: 1, salary: 0 });
+const [contractOffer, setContractOffer] = useState({ years: 3, salary: 0 });
 const [teamNameInput, setTeamNameInput] = useState('');
 const [gameOverReason, setGameOverReason] = useState(null);
 
@@ -306,14 +306,89 @@ function initializeLeagueMembership(playerTeam) {
     console.log(`\n✓ Duplicates removed in ${iterations} iteration(s)`);
   }
 
+  // CASCADING FILL SYSTEM - Fill leagues top-down, cascading promotions
+  console.log('\n--- Starting cascading fill system ---');
   
+  // Check each league from top to bottom
+  for (const league of [1, 2, 3, 4, 5]) {
+    const expected = LEAGUES[league].teams;
+    const actual = membership[league].length;
+    const shortage = expected - actual;
+    
+    if (shortage > 0) {
+      console.log(`League ${league} short by ${shortage} teams`);
+      
+      // Try to fill from this league's own pool first
+      const existingTeams = new Set([
+        ...membership[1],
+        ...membership[2],
+        ...membership[3],
+        ...membership[4],
+        ...membership[5]
+      ]);
+      
+      const availableInLeague = TEAM_NAMES[league].filter(t => 
+        !existingTeams.has(t) && t !== playerTeam
+      );
+      
+      let filled = 0;
+      
+      // Fill from own pool
+      for (const team of availableInLeague) {
+        if (filled >= shortage) break;
+        membership[league].push(team);
+        existingTeams.add(team);
+        filled++;
+        console.log(`  Filled with "${team}" from league ${league} pool`);
+      }
+      
+      // If still short, CASCADE from league below
+      if (filled < shortage) {
+        const remaining = shortage - filled;
+        console.log(`  Still need ${remaining} teams, cascading from below...`);
+        
+        if (league < 5) {
+          // Promote teams from league below
+          const lowerLeague = league + 1;
+          const teamsToPromote = membership[lowerLeague].slice(0, remaining);
+          
+          teamsToPromote.forEach(team => {
+            membership[league].push(team);
+            membership[lowerLeague] = membership[lowerLeague].filter(t => t !== team);
+            console.log(`  Cascaded "${team}" from league ${lowerLeague} to ${league}`);
+          });
+          
+          // This will create shortage in lower league, which next iteration will fix
+        } else {
+          // League 5 (National League) - add from any available pool
+          console.log(`  National League short - adding from any available pool`);
+          
+          for (let srcLeague = 4; srcLeague >= 1; srcLeague--) {
+            if (filled >= shortage) break;
+            
+            const availableFromSrc = TEAM_NAMES[srcLeague].filter(t => 
+              !existingTeams.has(t) && t !== playerTeam
+            );
+            
+            for (const team of availableFromSrc) {
+              if (filled >= shortage) break;
+              membership[5].push(team);
+              existingTeams.add(team);
+              filled++;
+              console.log(`  Added "${team}" from league ${srcLeague} pool to National League`);
+            }
+          }
+        }
+      }
+    }
+  }
   
   // Shuffle each league
   Object.keys(membership).forEach(league => {
     membership[league] = membership[league].sort(() => Math.random() - 0.5);
   });
   
-  console.log('\n✓ Final league membership (no duplicates):', {
+  console.log('\n✓ Final league membership after cascading fill:', {
     PL: membership[1].length,
     Championship: membership[2].length,
     L1: membership[3].length,
@@ -2805,9 +2880,9 @@ function endSeason() {
   // Add promotion bonus - scaled to cover facility upgrades plus operating cushion
   let promotionBonus = 0;
   if (promoted) {
-    if (gameState.league === 5) promotionBonus = 7000000;      // £7M (was £2M) - covers L2 facilities + buffer
-    else if (gameState.league === 4) promotionBonus = 17000000;  // £17M (was £8M) - covers L1 facilities + buffer
-    else if (gameState.league === 3) promotionBonus = 45000000;  // £45M (was £15M) - covers Championship facilities + buffer
+    if (gameState.league === 5) promotionBonus = 5000000;      // £5M (was £2M) - covers L2 facilities + buffer
+    else if (gameState.league === 4) promotionBonus = 15000000;  // £15M (was £8M) - covers L1 facilities + buffer
+    else if (gameState.league === 3) promotionBonus = 35000000;  // £35M (was £15M) - covers Championship facilities + buffer
     else if (gameState.league === 2) promotionBonus = 75000000;  // £75M (was £30M) - covers PL facilities + buffer
   }
 
@@ -3803,6 +3878,23 @@ function offerContractWithFee(player, years, salary, negotiatedTransferFee) {
       return;
     }
   }
+
+    // IF WE GET HERE, TRANSFER FEE WAS ACCEPTED - Clear rejection flags
+  if (player.requiresTransferFee && player.transferFeeRejected) {
+    setGameState(prev => ({
+      ...prev,
+      freeAgents: prev.freeAgents.map(p => 
+        p.id === player.id ? { 
+          ...p, 
+          transferFeeRejected: false,
+          transferFeeAccepted: true, // Add this flag
+          offeredTransferFee: negotiatedTransferFee,
+          demandedTransferFee: null
+        } : p
+      )
+    }));
+  }
+
   
 
   const { accepted, marketValue, reachedLimit } = negotiateContract(player, { years, salary });
@@ -4351,6 +4443,13 @@ function getStartingLineup(squad) {
   return new Set(bestFormation.starters.map(p => p.id));
 }
 
+// Reset contract offer when selected player changes in contract renewals
+useEffect(() => {
+  if (view === 'contracts' && gameState.contractNegotiations) {
+    setContractOffer({ years: 3, salary: '', playerId: null });
+  }
+}, [view]);
+
 useEffect(() => {
   if (!gameState || !gameState.paused && gameState.seasonPhase === 'regular') {
     if (!gameState) return;
@@ -4709,7 +4808,10 @@ if (view === 'freeagents') {
                     )}
                   </div>
                   <button
-                    onClick={() => setSelectedPlayer(player)}
+                    onClick={() => {
+                      setSelectedPlayer(player);
+                      setContractOffer({ years: 3, salary: player.marketValue || player.salary, playerId: player.id });
+                    }}
                     className="btn btn-success btn-bold"
                   >
                     Make Offer
@@ -4732,7 +4834,7 @@ if (view === 'freeagents') {
                     </div>
                   )}
                   
-                  {/* Transfer fee rejection */}
+                  {/* Transfer fee status */}
                   {player.transferNegotiationEnded ? (
                     <div className="rejection-notice">
                       <div className="rejection-title">🚫 Transfer Negotiations Ended</div>
@@ -4741,7 +4843,16 @@ if (view === 'freeagents') {
                         This player is no longer available for transfer.
                       </div>
                     </div>
-                  ) : player.transferFeeRejected && player.offeredTransferFee && player.demandedTransferFee && (
+                  ) : player.transferFeeAccepted ? (
+                    <div className="contract-summary" style={{ background: 'rgba(16, 185, 129, 0.2)', padding: '12px', borderRadius: '6px', marginBottom: '12px' }}>
+                      <div className="text-success">
+                        ✓ Transfer Fee Accepted: £{(player.offeredTransferFee / 1000).toFixed(0)}k
+                      </div>
+                      <div style={{ fontSize: '0.875rem', marginTop: '4px' }}>
+                        Club has agreed to the transfer. Now negotiate personal terms with the player.
+                      </div>
+                    </div>
+                  ) : player.transferFeeRejected && player.offeredTransferFee && player.demandedTransferFee ? (
                     <div className="rejection-notice">
                       <div className="rejection-title">⚠️ Transfer Fee Rejected by Club:</div>
                       <div>Your Offer: £{(player.offeredTransferFee / 1000).toFixed(0)}k</div>
@@ -4757,7 +4868,7 @@ if (view === 'freeagents') {
                       )}
                       <div className="rejection-hint">Increase your transfer fee offer below</div>
                     </div>
-                  )}
+                  ) : null}
                   
                   {/* Player salary rejection */}
                   {player.status === 'rejected' && player.offer && player.marketValue && (
@@ -4787,19 +4898,27 @@ if (view === 'freeagents') {
                         max="5"
                         value={contractOffer.years}
                         onChange={(e) => {
-                          const value = parseInt(e.target.value);
-                          if (value >= 1 && value <= 5) {
-                            setContractOffer(prev => ({ ...prev, years: value }));
-                          } else if (e.target.value === '') {
-                            setContractOffer(prev => ({ ...prev, years: 1 }));
+                          const value = e.target.value;
+                          if (value === '') {
+                            setContractOffer(prev => ({ ...prev, years: '' }));
+                          } else {
+                            const numValue = parseInt(value);
+                            if (numValue >= 1 && numValue <= 5) {
+                              setContractOffer(prev => ({ ...prev, years: numValue }));
+                            }
                           }
                         }}
                         onBlur={(e) => {
-                          const value = parseInt(e.target.value);
-                          if (isNaN(value) || value < 1) {
+                          const value = e.target.value;
+                          if (value === '' || isNaN(parseInt(value))) {
                             setContractOffer(prev => ({ ...prev, years: 1 }));
-                          } else if (value > 5) {
-                            setContractOffer(prev => ({ ...prev, years: 5 }));
+                          } else {
+                            const numValue = parseInt(value);
+                            if (numValue < 1) {
+                              setContractOffer(prev => ({ ...prev, years: 1 }));
+                            } else if (numValue > 5) {
+                              setContractOffer(prev => ({ ...prev, years: 5 }));
+                            }
                           }
                         }}
                         className="form-input"
@@ -4813,16 +4932,20 @@ if (view === 'freeagents') {
                         min="10"
                         step="5"
                         placeholder="0"
-                        defaultValue={Math.round(player.salary / 1000)}
+                        value={
+                          contractOffer.playerId === player.id 
+                            ? (contractOffer.salary === "" ? "" : Math.round(contractOffer.salary / 1000))
+                            : Math.round((player.marketValue || player.salary) / 1000)
+                        }
                         onChange={(e) => {
                           const v = e.target.value;
                           if (v === "") {
-                            setContractOffer(prev => ({ ...prev, salary: "" }));
+                            setContractOffer(prev => ({ ...prev, salary: "", playerId: player.id }));
                             return;
                           }
                           const thousands = parseInt(v, 10);
                           if (!isNaN(thousands)) {
-                            setContractOffer(prev => ({ ...prev, salary: thousands * 1000 }));
+                            setContractOffer(prev => ({ ...prev, salary: thousands * 1000, playerId: player.id }));
                           }
                         }}
                         className="form-input"
@@ -5151,8 +5274,8 @@ if (view === 'contracts') {
                 </div>
 
                 {(player.status === 'pending' || player.status === 'rejected') && player.status !== 'walked_away' && (
-                  <div className="contract-offer-section">
-                    <h3 className="section-title">{player.status === 'rejected' ? 'Counter Offer' : 'New Contract Offer'}</h3>
+                <div className="contract-offer-section" key={player.id}>
+                  <h3 className="section-title">{player.status === 'rejected' ? 'Counter Offer' : 'New Contract Offer'}</h3>
                     {player.status === 'rejected' && player.offer && player.marketValue && (
                       <div className="rejection-notice">
                         <div className="rejection-title">Previous Rejected Offer:</div>
@@ -5171,14 +5294,32 @@ if (view === 'contracts') {
                           type="number"
                           min="1"
                           max="5"
-                          defaultValue={player.offer?.years || 2}
-                          id={`years-${player.id}`}
-                          className="form-input"
-                          onBlur={(e) => {
-                            const value = parseInt(e.target.value);
-                            if (value > 5) e.target.value = 5;
-                            if (value < 1) e.target.value = 1;
+                          value={contractOffer.years}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (value === '') {
+                              setContractOffer(prev => ({ ...prev, years: '' }));
+                            } else {
+                              const numValue = parseInt(value);
+                              if (numValue >= 1 && numValue <= 5) {
+                                setContractOffer(prev => ({ ...prev, years: numValue }));
+                              }
+                            }
                           }}
+                          onBlur={(e) => {
+                            const value = e.target.value;
+                            if (value === '' || isNaN(parseInt(value))) {
+                              setContractOffer(prev => ({ ...prev, years: 1 }));
+                            } else {
+                              const numValue = parseInt(value);
+                              if (numValue < 1) {
+                                setContractOffer(prev => ({ ...prev, years: 1 }));
+                              } else if (numValue > 5) {
+                                setContractOffer(prev => ({ ...prev, years: 5 }));
+                              }
+                            }
+                          }}
+                          className="form-input"
                         />
                       </div>
                       <div className="form-group">
@@ -5188,8 +5329,22 @@ if (view === 'contracts') {
                           min="10"
                           step="5"
                           placeholder="0"
-                          defaultValue={Math.round((player.marketValue || Math.floor(player.salary * 1.1)) / 1000)}
-                          id={`salary-${player.id}`}
+                          value={
+                            contractOffer.playerId === player.id 
+                              ? (contractOffer.salary === "" ? "" : Math.round(contractOffer.salary / 1000))
+                              : Math.round((player.marketValue || player.salary) / 1000)
+                          }
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            if (v === "") {
+                              setContractOffer(prev => ({ ...prev, salary: "", playerId: player.id }));
+                              return;
+                            }
+                            const thousands = parseInt(v, 10);
+                            if (!isNaN(thousands)) {
+                              setContractOffer(prev => ({ ...prev, salary: thousands * 1000, playerId: player.id }));
+                            }
+                          }}
                           className="form-input"
                         />
                         <div className="form-hint">
@@ -5199,11 +5354,11 @@ if (view === 'contracts') {
                     </div>
                     <button
                       onClick={() => {
-                        const yearsInput = document.getElementById(`years-${player.id}`);
-                        const salaryInput = document.getElementById(`salary-${player.id}`);
-                        const years = parseInt(yearsInput.value) || 2;
-                        const salaryInThousands = parseInt(salaryInput.value) || 0;
-                        const salary = salaryInThousands * 1000;
+                        const years = contractOffer.years || 2;
+                        // If playerId doesn't match or salary is empty, use player's market value
+                        const salary = (contractOffer.playerId === player.id && contractOffer.salary) 
+                          ? contractOffer.salary 
+                          : (player.marketValue || player.salary);
                         offerContract(player, years, salary);
                       }}
                       className="btn btn-primary btn-bold"
@@ -5551,7 +5706,10 @@ if (view === 'academy') {
                   </div>
                   {player.status !== 'accepted' && player.status !== 'walked_away' && (
                     <button
-                      onClick={() => setSelectedPlayer(player)}
+                      onClick={() => {
+                        setSelectedPlayer(player);
+                        setContractOffer({ years: 3, salary: player.marketValue || player.salary, playerId: player.id });
+                      }}
                       className="btn btn-success btn-bold"
                     >
                       Promote to First Team
@@ -5561,7 +5719,7 @@ if (view === 'academy') {
               </div>
 
               {selectedPlayer?.id === player.id && player.status !== 'accepted' && player.status !== 'walked_away' && (
-                <div className="contract-offer-section">
+                <div className="contract-offer-section" key={player.id}>
                   <h3 className="section-title">First Team Contract Offer</h3>
                   
                   {player.status === 'rejected' && player.offer && player.marketValue && (
@@ -5617,22 +5775,23 @@ if (view === 'academy') {
                         step="5"
                         placeholder="0"
                         value={
-                          contractOffer.salary === "" 
-                            ? "" 
-                            : Math.round((contractOffer.salary || player.salary) / 1000)
+                          contractOffer.playerId === player.id 
+                            ? (contractOffer.salary === "" ? "" : Math.round(contractOffer.salary / 1000))
+                            : Math.round((player.marketValue || player.salary) / 1000)
                         }
                         onChange={(e) => {
                           const v = e.target.value;
                           if (v === "") {
-                            setContractOffer(prev => ({ ...prev, salary: "" }));
+                            setContractOffer(prev => ({ ...prev, salary: "", playerId: player.id }));
                             return;
                           }
                           const thousands = parseInt(v, 10);
                           if (!isNaN(thousands)) {
-                            setContractOffer(prev => ({ ...prev, salary: thousands * 1000 }));
+                            setContractOffer(prev => ({ ...prev, salary: thousands * 1000, playerId: player.id }));
                           }
                         }}
                         className="form-input"
+                        disabled={player.status === 'walked_away'}
                       />
                       <div className="form-hint">
                         Enter amount in thousands (e.g., 65 = £65,000/year)
@@ -5653,8 +5812,10 @@ if (view === 'academy') {
                   <div className="button-group">
                     <button
                       onClick={() => {
-                        const salary = contractOffer.salary || player.salary;
-                        const years = contractOffer.years;
+                        const salary = (contractOffer.playerId === player.id && contractOffer.salary) 
+                          ? contractOffer.salary 
+                          : player.salary;
+                        const years = contractOffer.years || 1;
                         offerContractToAcademyPlayer(player, years, salary);
                       }}
                       className="btn btn-primary btn-bold"
