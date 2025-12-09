@@ -3448,11 +3448,11 @@ function calculateMarketValue(player, league) {
   // Age factor - salary peaks at prime years (27-29)
   let ageMultiplier = 1.0;
   if (player.age <= 20) {
-    ageMultiplier = 0.70; // Young prospects - low wages
+    ageMultiplier = 0.80; // Young prospects - low wages
   } else if (player.age <= 23) {
-    ageMultiplier = 0.80; // Developing - moderate wages
+    ageMultiplier = 0.95; // Developing - moderate wages
   } else if (player.age <= 26) {
-    ageMultiplier = 1.05; // Rising prime - good wages
+    ageMultiplier = 1.10; // Rising prime - good wages
   } else if (player.age <= 29) {
     ageMultiplier = 1.20; // PEAK - highest wages
   } else if (player.age <= 31) {
@@ -3566,9 +3566,9 @@ function calculateTransferFee(player, league) {
   else if (rating <= 97) {
     baseTransferFee = 68000000 + ((rating - 96) / 2) * 27000000;
   }
-  // 98+: Elite (£90M-£140M)
+  // 98+: Elite (£130M-£180M)
   else {
-    baseTransferFee = 90000000 + ((rating - 98) / 4) * 50000000;
+    baseTransferFee = 130000000 + ((rating - 98) / 4) * 50000000;
   }
   
   // Age modifiers - transfer value peaks earlier (22-25)
@@ -5749,19 +5749,27 @@ if (view === 'academy') {
                         max="5"
                         value={contractOffer.years}
                         onChange={(e) => {
-                          const value = parseInt(e.target.value);
-                          if (value >= 1 && value <= 5) {
-                            setContractOffer(prev => ({ ...prev, years: value }));
-                          } else if (e.target.value === '') {
-                            setContractOffer(prev => ({ ...prev, years: 1 }));
+                          const value = e.target.value;
+                          if (value === '') {
+                            setContractOffer(prev => ({ ...prev, years: '' }));
+                          } else {
+                            const numValue = parseInt(value);
+                            if (numValue >= 1 && numValue <= 5) {
+                              setContractOffer(prev => ({ ...prev, years: numValue }));
+                            }
                           }
                         }}
                         onBlur={(e) => {
-                          const value = parseInt(e.target.value);
-                          if (isNaN(value) || value < 1) {
-                            setContractOffer(prev => ({ ...prev, years: 1 }));
-                          } else if (value > 5) {
-                            setContractOffer(prev => ({ ...prev, years: 5 }));
+                          const value = e.target.value;
+                          if (value === '' || isNaN(parseInt(value))) {
+                            setContractOffer(prev => ({ ...prev, years: 3 }));
+                          } else {
+                            const numValue = parseInt(value);
+                            if (numValue < 1) {
+                              setContractOffer(prev => ({ ...prev, years: 1 }));
+                            } else if (numValue > 5) {
+                              setContractOffer(prev => ({ ...prev, years: 5 }));
+                            }
                           }
                         }}
                         className="form-input"
