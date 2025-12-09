@@ -2805,10 +2805,10 @@ function endSeason() {
   // Add promotion bonus - scaled to cover facility upgrades plus operating cushion
   let promotionBonus = 0;
   if (promoted) {
-    if (gameState.league === 5) promotionBonus = 5000000;      // £5M (was £2M) - covers L2 facilities + buffer
-    else if (gameState.league === 4) promotionBonus = 12000000;  // £12M (was £8M) - covers L1 facilities + buffer
-    else if (gameState.league === 3) promotionBonus = 25000000;  // £25M (was £15M) - covers Championship facilities + buffer
-    else if (gameState.league === 2) promotionBonus = 50000000;  // £50M (was £30M) - covers PL facilities + buffer
+    if (gameState.league === 5) promotionBonus = 7000000;      // £7M (was £2M) - covers L2 facilities + buffer
+    else if (gameState.league === 4) promotionBonus = 17000000;  // £17M (was £8M) - covers L1 facilities + buffer
+    else if (gameState.league === 3) promotionBonus = 45000000;  // £45M (was £15M) - covers Championship facilities + buffer
+    else if (gameState.league === 2) promotionBonus = 75000000;  // £75M (was £30M) - covers PL facilities + buffer
   }
 
   const totalRevenue = tvRevenue + ticketRevenue + sponsorshipRevenue + merchandiseRevenue + prize + promotionBonus;
@@ -3083,16 +3083,113 @@ function startNewSeason() {
     const negotiation = gameState.contractNegotiations.find(n => n.id === player.id);
     const newAge = player.age + 1;
     
-    // Rating progression/regression
+    // Rating progression/regression - peaks at 27-29
     let ratingChange = 0;
-    if (newAge <= 23) {
-      ratingChange = Math.random() < 0.7 ? (Math.random() < 0.5 ? 2 : 1) : (Math.random() < 0.3 ? -1 : 0);
-    } else if (newAge <= 28) {
-      ratingChange = Math.random() < 0.4 ? 1 : (Math.random() < 0.3 ? -1 : 0);
+
+    if (newAge <= 21) {
+      // Young players: high variance, breakthrough potential
+      const roll = Math.random();
+      if (roll < 0.02) {
+        ratingChange = 5 + Math.floor(Math.random() * 2); // 5-6 (2% chance - wonderkid breakthrough)
+      } else if (roll < 0.08) {
+        ratingChange = 3 + Math.floor(Math.random() * 2); // 3-4 (6% chance - major leap)
+      } else if (roll < 0.40) {
+        ratingChange = 2; // (32% chance)
+      } else if (roll < 0.65) {
+        ratingChange = 1; // (25% chance)
+      } else if (roll < 0.80) {
+        ratingChange = 0; // (15% chance)
+      } else {
+        ratingChange = -1; // (20% chance - inconsistent)
+      }
+    } else if (newAge <= 24) {
+      // Development phase: consistent improvement with breakthrough chances
+      const roll = Math.random();
+      if (roll < 0.03) {
+        ratingChange = 4 + Math.floor(Math.random() * 2); // 4-5 (3% chance - late bloomer)
+      } else if (roll < 0.12) {
+        ratingChange = 3; // (9% chance)
+      } else if (roll < 0.45) {
+        ratingChange = 2; // (33% chance)
+      } else if (roll < 0.75) {
+        ratingChange = 1; // (30% chance)
+      } else if (roll < 0.92) {
+        ratingChange = 0; // (17% chance)
+      } else {
+        ratingChange = -1; // (8% chance - stagnation)
+      }
+    } else if (newAge <= 27) {
+      // Rising to peak: steady growth with occasional spurts
+      const roll = Math.random();
+      if (roll < 0.02) {
+        ratingChange = 3 + Math.floor(Math.random() * 2); // 3-4 (2% chance - finding form)
+      } else if (roll < 0.10) {
+        ratingChange = 2; // (8% chance)
+      } else if (roll < 0.50) {
+        ratingChange = 1; // (40% chance)
+      } else if (roll < 0.75) {
+        ratingChange = 0; // (25% chance)
+      } else {
+        ratingChange = -1; // (25% chance - slight decline)
+      }
+    } else if (newAge <= 29) {
+      // PEAK: mostly stable, small changes
+      const roll = Math.random();
+      if (roll < 0.01) {
+        ratingChange = 3; // (1% chance - rare late peak)
+      } else if (roll < 0.05) {
+        ratingChange = 2; // (4% chance)
+      } else if (roll < 0.25) {
+        ratingChange = 1; // (20% chance)
+      } else if (roll < 0.60) {
+        ratingChange = 0; // (35% chance - stability)
+      } else if (roll < 0.90) {
+        ratingChange = -1; // (30% chance)
+      } else {
+        ratingChange = -2; // (10% chance - early decline)
+      }
     } else if (newAge <= 32) {
-      ratingChange = Math.random() < 0.4 ? -1 : (Math.random() < 0.2 ? 1 : 0);
+      // Post-peak: slight decline with stability
+      const roll = Math.random();
+      if (roll < 0.05) {
+        ratingChange = 1; // (5% chance - defying age)
+      } else if (roll < 0.25) {
+        ratingChange = 0; // (20% chance)
+      } else if (roll < 0.65) {
+        ratingChange = -1; // (40% chance)
+      } else if (roll < 0.90) {
+        ratingChange = -2; // (25% chance)
+      } else {
+        ratingChange = -3; // (10% chance - sharp decline)
+      }
+    } else if (newAge <= 34) {
+      // Decline phase: faster regression
+      const roll = Math.random();
+      if (roll < 0.10) {
+        ratingChange = 0; // (10% chance - maintaining)
+      } else if (roll < 0.40) {
+        ratingChange = -1; // (30% chance)
+      } else if (roll < 0.75) {
+        ratingChange = -2; // (35% chance)
+      } else if (roll < 0.95) {
+        ratingChange = -3; // (20% chance)
+      } else {
+        ratingChange = -4; // (5% chance - steep drop)
+      }
     } else {
-      ratingChange = Math.random() < 0.7 ? (Math.random() < 0.6 ? -2 : -1) : 0;
+      // Veteran: steep decline
+      const roll = Math.random();
+      if (roll < 0.05) {
+        ratingChange = -1; // (5% chance - hanging on)
+      } else if (roll < 0.30) {
+        ratingChange = -2; // (25% chance)
+      } else if (roll < 0.65) {
+        ratingChange = -3; // (35% chance)
+      } else if (roll < 0.90) {
+        ratingChange = -4; // (25% chance)
+      } else {
+        ratingChange = -5 - Math.floor(Math.random() * 2); // -5 to -6 (10% chance - cliff)
+      }
     }
     
     const newRating = Math.max(40, Math.min(99, player.rating + ratingChange));
@@ -3273,18 +3370,22 @@ function calculateMarketValue(player, league) {
   const growthFactor = Math.pow(salaryRatio, normalizedRating);
   baseSalary = lowerPoint.salary * growthFactor;
   
-  // Age factor - younger players command higher salaries (potential)
+  // Age factor - salary peaks at prime years (27-29)
   let ageMultiplier = 1.0;
-  if (player.age <= 21) {
-    ageMultiplier = 1.30; // Young prospects worth more
-  } else if (player.age <= 24) {
-    ageMultiplier = 1.20; // Developing
-  } else if (player.age <= 27) {
-    ageMultiplier = 1.10; // Prime
-  } else if (player.age >= 30) {
-    ageMultiplier = 0.80; // Declining
-  } else if (player.age >= 33) {
-    ageMultiplier = 0.65; // Old
+  if (player.age <= 20) {
+    ageMultiplier = 0.70; // Young prospects - low wages
+  } else if (player.age <= 23) {
+    ageMultiplier = 0.80; // Developing - moderate wages
+  } else if (player.age <= 26) {
+    ageMultiplier = 1.05; // Rising prime - good wages
+  } else if (player.age <= 29) {
+    ageMultiplier = 1.20; // PEAK - highest wages
+  } else if (player.age <= 31) {
+    ageMultiplier = 1.10; // Still prime - high wages
+  } else if (player.age <= 33) {
+    ageMultiplier = 0.85; // Declining - reduced wages
+  } else {
+    ageMultiplier = 0.60; // Veteran - much lower wages
   }
   
   baseSalary *= ageMultiplier;
@@ -3395,17 +3496,23 @@ function calculateTransferFee(player, league) {
     baseTransferFee = 90000000 + ((rating - 98) / 4) * 50000000;
   }
   
-  // Age modifiers
-  if (player.age <= 21) {
-    baseTransferFee *= 1.35; // Young prospect premium
-  } else if (player.age <= 24) {
-    baseTransferFee *= 1.20; // Developing player
+  // Age modifiers - transfer value peaks earlier (22-25)
+  if (player.age <= 20) {
+    baseTransferFee *= 1.15; // Young prospect premium (but not highest)
+  } else if (player.age <= 22) {
+    baseTransferFee *= 1.25; // Rising star - high value
+  } else if (player.age <= 25) {
+    baseTransferFee *= 1.35; // PEAK transfer value - resale + prime ahead
   } else if (player.age <= 27) {
-    baseTransferFee *= 1.05; // Prime years
-  } else if (player.age >= 30) {
-    baseTransferFee *= 0.65; // Aging discount
-  } else if (player.age >= 33) {
-    baseTransferFee *= 0.45; // Veteran discount
+    baseTransferFee *= 1.15; // Still valuable - entering prime
+  } else if (player.age <= 29) {
+    baseTransferFee *= 1.00; // Prime years but less resale value
+  } else if (player.age <= 31) {
+    baseTransferFee *= 0.85; // Declining value
+  } else if (player.age <= 33) {
+    baseTransferFee *= 0.60; // Aging
+  } else {
+    baseTransferFee *= 0.40; // Veteran - low transfer value
   }
   
   // Position premiums
@@ -3431,7 +3538,11 @@ function calculateTransferFee(player, league) {
     baseTransferFee = Math.min(150000000, baseTransferFee);
   }
   
-  return Math.floor(Math.max(0, baseTransferFee));
+  // At the very end, before the final return:
+  const finalFee = Math.floor(Math.max(0, baseTransferFee));
+  
+  // If market value is under £10k, make it free
+  return finalFee < 10000 ? 0 : finalFee;
 }
 
 function negotiateContract(player, offer) {
@@ -3619,12 +3730,42 @@ function offerContract(player, years, salary) {
 }
 
 function offerContractWithFee(player, years, salary, negotiatedTransferFee) {
+  // Check if player has reached their transfer fee rejection limit
+  if (player.transferFeeRejectionCount !== undefined && player.transferFeeRejectionCount >= 3) {
+    setGameState(prev => ({
+      ...prev,
+      freeAgents: prev.freeAgents.map(p => 
+        p.id === player.id ? { 
+          ...p, 
+          transferFeeRejected: true,
+          transferNegotiationEnded: true
+        } : p
+      )
+    }));
+    return;
+  }
+
   // Check if offer is reasonable for transfer fee
   if (player.requiresTransferFee && negotiatedTransferFee < player.transferFee) {
     const offerRatio = negotiatedTransferFee / player.transferFee;
     
-    // Selling club rejects lowball offers
-    if (offerRatio < 0.7) {
+    // Calculate NEW counteroffer (always lower or equal to previous)
+    let newDemandedFee;
+    if (player.previousTransferDemand) {
+      // Subsequent offer - lower the demand by 5-10%
+      const reduction = 0.90 + Math.random() * 0.05; // 90-95% of previous demand
+      newDemandedFee = Math.floor(player.previousTransferDemand * reduction);
+      // But never go below 70% of original asking price
+      newDemandedFee = Math.max(Math.floor(player.transferFee * 0.70), newDemandedFee);
+    } else {
+      // First rejection - demand 85% of asking price
+      newDemandedFee = Math.floor(player.transferFee * 0.85);
+    }
+    
+    // Selling club rejects lowball offers (under 60% of their demand)
+    if (negotiatedTransferFee < newDemandedFee * 0.6) {
+      const newRejectionCount = (player.transferFeeRejectionCount || 0) + 1;
+      
       setGameState(prev => ({
         ...prev,
         freeAgents: prev.freeAgents.map(p => 
@@ -3632,22 +3773,20 @@ function offerContractWithFee(player, years, salary, negotiatedTransferFee) {
             ...p, 
             transferFeeRejected: true,
             offeredTransferFee: negotiatedTransferFee,
-            demandedTransferFee: Math.floor(player.transferFee * 0.85)
+            demandedTransferFee: newDemandedFee,
+            previousTransferDemand: newDemandedFee,
+            transferFeeRejectionCount: newRejectionCount
           } : p
         )
       }));
-      setFreeAgentMessage({ 
-        player: player.name, 
-        transferFeeRejected: true, 
-        offeredFee: negotiatedTransferFee,
-        demandedFee: Math.floor(player.transferFee * 0.85)
-      });
       return;
     }
     
-    // 70-90% of asking price has reduced acceptance
-    const acceptChance = (offerRatio - 0.7) / 0.3;
+    // 60-90% of their demand has reduced acceptance
+    const acceptChance = (negotiatedTransferFee / newDemandedFee - 0.6) / 0.3;
     if (Math.random() > acceptChance) {
+      const newRejectionCount = (player.transferFeeRejectionCount || 0) + 1;
+      
       setGameState(prev => ({
         ...prev,
         freeAgents: prev.freeAgents.map(p => 
@@ -3655,25 +3794,22 @@ function offerContractWithFee(player, years, salary, negotiatedTransferFee) {
             ...p, 
             transferFeeRejected: true,
             offeredTransferFee: negotiatedTransferFee,
-            demandedTransferFee: player.transferFee
+            demandedTransferFee: newDemandedFee,
+            previousTransferDemand: newDemandedFee,
+            transferFeeRejectionCount: newRejectionCount
           } : p
         )
       }));
-      setFreeAgentMessage({ 
-        player: player.name, 
-        transferFeeRejected: true, 
-        offeredFee: negotiatedTransferFee,
-        demandedFee: player.transferFee
-      });
       return;
     }
   }
   
 
-  const { accepted, marketValue } = negotiateContract(player, { years, salary });
+  const { accepted, marketValue, reachedLimit } = negotiateContract(player, { years, salary });
   
   if (view === 'freeagents') {
     if (accepted) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       const newPlayer = { 
         ...player, 
         contractYears: years, 
@@ -3710,13 +3846,24 @@ function offerContractWithFee(player, years, salary, negotiatedTransferFee) {
       }
       setSelectedPlayer(null);
     } else {
+      // Increment rejection count
+      const newRejectionCount = (player.rejectionCount || 0) + 1;
+      
       setGameState(prev => ({
         ...prev,
         freeAgents: prev.freeAgents.map(p => 
-          p.id === player.id ? { ...p, status: 'rejected', offer: { years, salary }, marketValue, previousCounteroffer: marketValue } : p
+          p.id === player.id ? { 
+            ...p, 
+            status: reachedLimit ? 'walked_away' : 'rejected', 
+            offer: { years, salary }, 
+            marketValue,
+            previousCounteroffer: marketValue,
+            rejectionCount: newRejectionCount,
+            rejectionLimit: player.rejectionLimit
+          } : p
         )
       }));
-      setFreeAgentMessage({ player: player.name, accepted: false, marketValue, offer: salary });
+      // No notification for rejection
     }
   } else if (view === 'contracts') {
     // Existing contract renewal logic (no transfer fees)
@@ -3860,78 +4007,97 @@ function listPlayerForTransfer(player, askingPrice) {
       break;
   }
   
-  // Base interest based on player quality in current league context
+  // Check if player is old (lower leagues want experience)
+  const isOld = player.age >= 30;
+  
+  // Poor quality or old players are EASIER to sell (lower leagues want them)
   let baseInterest;
-  switch(playerQualityForLeague) {
-    case 'star':
-      baseInterest = 0.95; // Star players always in demand
-      break;
-    case 'good':
-      baseInterest = 0.80; // Good players usually get offers
-      break;
-    case 'average':
-      baseInterest = 0.60; // Average players moderate interest
-      break;
-    case 'poor':
-      baseInterest = 0.25; // Poor players hard to sell
-      break;
-    default:
-      baseInterest = 0.60;
+  if (playerQualityForLeague === 'poor' || isOld) {
+    baseInterest = 0.85; // Easy to sell to lower leagues
+  } else if (playerQualityForLeague === 'star') {
+    baseInterest = 0.95; // Star players always in demand
+  } else if (playerQualityForLeague === 'good') {
+    baseInterest = 0.80; // Good players usually get offers
+  } else {
+    baseInterest = 0.60; // Average players moderate interest
   }
   
   // Adjust for pricing
   const priceRatio = askingPrice / marketValue;
   let priceMultiplier = 1.0;
   
-  if (priceRatio > 1.5) {
-    priceMultiplier = 0.3; // Massively overpriced
-  } else if (priceRatio > 1.3) {
-    priceMultiplier = 0.5; // Significantly overpriced
-  } else if (priceRatio > 1.15) {
-    priceMultiplier = 0.7; // Slightly overpriced
-  } else if (priceRatio < 0.7) {
-    priceMultiplier = 1.4; // Bargain - increases interest
-  } else if (priceRatio < 0.85) {
-    priceMultiplier = 1.2; // Good deal
+  // Poor/old players: clubs expect fair value (not bargains)
+  if (playerQualityForLeague === 'poor' || isOld) {
+    if (priceRatio > 1.3) {
+      priceMultiplier = 0.6; // Still reject massive overpricing
+    } else if (priceRatio > 1.1) {
+      priceMultiplier = 0.85; // Slight overpricing OK
+    }
+    // Otherwise keep 1.0 - they'll pay market value
+  } else {
+    // Good/star players: normal pricing sensitivity
+    if (priceRatio > 1.5) {
+      priceMultiplier = 0.3;
+    } else if (priceRatio > 1.3) {
+      priceMultiplier = 0.5;
+    } else if (priceRatio > 1.15) {
+      priceMultiplier = 0.7;
+    } else if (priceRatio < 0.7) {
+      priceMultiplier = 1.4;
+    } else if (priceRatio < 0.85) {
+      priceMultiplier = 1.2;
+    }
   }
   
-  // Age factor - younger players more desirable
+  // Age factor - OLD players now EASIER to sell (reversed logic)
   let ageFactor = 1.0;
   if (player.age <= 23) {
     ageFactor = 1.3; // Young prospects in high demand
   } else if (player.age <= 26) {
     ageFactor = 1.15; // Prime age
   } else if (player.age >= 32) {
-    ageFactor = 0.6; // Older players harder to sell
+    ageFactor = 1.2; // OLD players wanted by lower leagues
   } else if (player.age >= 30) {
-    ageFactor = 0.8; // Aging players
+    ageFactor = 1.1; // Experienced players wanted
   }
   
-  // Position factor - some positions always needed
+  // Position factor
   let positionFactor = 1.0;
   if (player.position === 'GK') {
-    positionFactor = 0.7; // GKs harder to sell (teams only need 1-2)
+    positionFactor = 0.7;
   }
   
   // Calculate final offer chance
   let offerChance = baseInterest * priceMultiplier * ageFactor * positionFactor;
-  offerChance = Math.max(0.05, Math.min(0.98, offerChance));
+  offerChance = Math.max(0.10, Math.min(0.98, offerChance));
   
   const hasOffer = Math.random() < offerChance;
   
   if (hasOffer) {
-    // Generate counter offer based on player quality and pricing
     let offerMultiplier;
     
-    if (priceRatio > 1.2) {
-      // If overpriced, offers come in much lower
-      offerMultiplier = 0.65 + Math.random() * 0.15; // 65-80% of asking
-    } else if (priceRatio < 0.8) {
-      // If underpriced, might get full price or more
-      offerMultiplier = 0.95 + Math.random() * 0.10; // 95-105% of asking
+    // Poor/old players: clubs pay market value
+    if (playerQualityForLeague === 'poor' || isOld) {
+      if (priceRatio > 1.2) {
+        offerMultiplier = 0.85 + Math.random() * 0.10; // 85-95% if overpriced
+      } else {
+        offerMultiplier = 0.95 + Math.random() * 0.10; // 95-105% at market value
+      }
     } else {
-      // Fair price, get reasonable offers
-      offerMultiplier = 0.85 + Math.random() * 0.12; // 85-97% of asking
+      // Good/star players: normal offer logic
+      if (priceRatio > 1.4) {
+        offerMultiplier = 0.60 + Math.random() * 0.15; // 60-75%
+      } else if (priceRatio > 1.2) {
+        offerMultiplier = 0.75 + Math.random() * 0.15; // 75-90%
+      } else if (priceRatio > 1.05) {
+        offerMultiplier = 0.90 + Math.random() * 0.10; // 90-100%
+      } else if (priceRatio >= 0.95 && priceRatio <= 1.05) {
+        offerMultiplier = 0.98 + Math.random() * 0.07; // 98-105%
+      } else if (priceRatio < 0.80) {
+        offerMultiplier = 1.00 + Math.random() * 0.10; // 100-110%
+      } else {
+        offerMultiplier = 0.95 + Math.random() * 0.10; // 95-105%
+      }
     }
     
     const counterOffer = Math.floor(askingPrice * offerMultiplier);
@@ -3957,14 +4123,10 @@ function listPlayerForTransfer(player, askingPrice) {
   } else {
     let reason = 'No offers received.';
     
-    if (playerQualityForLeague === 'poor') {
-      reason = 'No offers - player quality too low for this level.';
-    } else if (priceRatio > 1.3) {
+    if (priceRatio > 1.3) {
       reason = 'No offers - asking price too high.';
-    } else if (player.age >= 32) {
-      reason = 'No offers - player may be too old.';
     } else {
-      reason = 'No offers. Try lowering the price or waiting.';
+      reason = 'No offers this time. Try again or adjust price.';
     }
     
     return { success: false, message: reason };
@@ -4571,7 +4733,15 @@ if (view === 'freeagents') {
                   )}
                   
                   {/* Transfer fee rejection */}
-                  {player.transferFeeRejected && player.offeredTransferFee && player.demandedTransferFee && (
+                  {player.transferNegotiationEnded ? (
+                    <div className="rejection-notice">
+                      <div className="rejection-title">🚫 Transfer Negotiations Ended</div>
+                      <div className="text-danger">
+                        The selling club has ended negotiations after {player.transferFeeRejectionCount} rejected offers.
+                        This player is no longer available for transfer.
+                      </div>
+                    </div>
+                  ) : player.transferFeeRejected && player.offeredTransferFee && player.demandedTransferFee && (
                     <div className="rejection-notice">
                       <div className="rejection-title">⚠️ Transfer Fee Rejected by Club:</div>
                       <div>Your Offer: £{(player.offeredTransferFee / 1000).toFixed(0)}k</div>
@@ -4579,6 +4749,12 @@ if (view === 'freeagents') {
                         Club Demands: £{(player.demandedTransferFee / 1000).toFixed(0)}k
                         {' '}(you offered {Math.round((player.offeredTransferFee / player.demandedTransferFee) * 100)}%)
                       </div>
+                      {player.transferFeeRejectionCount && (
+                        <div className="text-danger">
+                          Rejections: {player.transferFeeRejectionCount}/3
+                          {player.transferFeeRejectionCount >= 2 && ' - Final offer!'}
+                        </div>
+                      )}
                       <div className="rejection-hint">Increase your transfer fee offer below</div>
                     </div>
                   )}
@@ -4622,11 +4798,7 @@ if (view === 'freeagents') {
                         min="10"
                         step="5"
                         placeholder="0"
-                        value={
-                          contractOffer.salary === "" 
-                            ? "" 
-                            : Math.round((contractOffer.salary || player.salary) / 1000)
-                        }
+                        defaultValue={Math.round(player.salary / 1000)}
                         onChange={(e) => {
                           const v = e.target.value;
                           if (v === "") {
@@ -4689,24 +4861,23 @@ if (view === 'freeagents') {
                   
                   <div className="button-group">
                     <button
-                      onClick={() => {
-                        const salary = contractOffer.salary || player.salary;
-                        const years = contractOffer.years;
-                        
-                        if (player.requiresTransferFee && player.transferFee) {
-                          const feeInput = document.getElementById(`transfer-fee-${player.id}`);
-                          const feeInputValue = parseInt(feeInput?.value);
-                          const negotiatedFee = (!isNaN(feeInputValue) ? feeInputValue : Math.round(player.transferFee / 1000)) * 1000;
-                          offerContractWithFee(player, years, salary, negotiatedFee);
-                        } else {
-                          offerContract(player, years, salary);
-                        }
-                      }}
-                      className="btn btn-primary btn-bold"
-                      disabled={player.status === 'walked_away'}
-                    >
-                      Submit Offer
-                    </button>
+                    onClick={() => {
+                      const salary = contractOffer.salary || player.salary;
+                      const years = contractOffer.years;
+                      
+                      if (player.requiresTransferFee && player.transferFee) {
+                        const feeInput = document.getElementById(`transfer-fee-${player.id}`);
+                        const negotiatedFee = (parseInt(feeInput?.value) || Math.round(player.transferFee / 1000)) * 1000;
+                        offerContractWithFee(player, years, salary, negotiatedFee);
+                      } else {
+                        offerContract(player, years, salary);
+                      }
+                    }}
+                    className="btn btn-primary btn-bold"
+                    disabled={player.transferNegotiationEnded || player.status === 'walked_away'}
+                  >
+                    Submit Offer
+                  </button>
                     <button
                       onClick={() => setSelectedPlayer(null)}
                       className="btn btn-secondary"
