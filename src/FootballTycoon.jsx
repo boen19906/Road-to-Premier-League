@@ -234,7 +234,12 @@ function initializeLeagueMembership(playerTeam) {
     5: [...TEAM_NAMES[5].slice(0, 23)]
   };
   
-  // Add player to National League
+  // FIRST: Remove player's chosen name from ALL leagues
+  [1, 2, 3, 4, 5].forEach(league => {
+    membership[league] = membership[league].filter(t => t !== playerTeam);
+  });
+  
+  // THEN: Add player to National League
   membership[5].push(playerTeam);
   
   // Keep checking and replacing until no duplicates remain
@@ -275,12 +280,13 @@ function initializeLeagueMembership(playerTeam) {
         
         // Look through ALL teams in this league's TEAM_NAMES
         for (const candidate of TEAM_NAMES[league]) {
+          // Now we can use any team that's not already assigned AND not the player team
           if (!globalAssigned.has(candidate) && candidate !== playerTeam) {
             cleaned.push(candidate);
             globalAssigned.add(candidate);
             console.log(`Replaced "${duplicate}" with "${candidate}" in league ${league}`);
             replaced = true;
-            hadDuplicates = true; // Mark that we found and fixed a duplicate
+            hadDuplicates = true;
             break;
           }
         }
@@ -299,6 +305,8 @@ function initializeLeagueMembership(playerTeam) {
   } else {
     console.log(`\n✓ Duplicates removed in ${iterations} iteration(s)`);
   }
+
+  
   
   // Shuffle each league
   Object.keys(membership).forEach(league => {
@@ -2364,7 +2372,7 @@ function endSeason() {
       const team2Rating = qf.team2.isPlayer ? calculateTeamRating(gameState.squad) : qf.team2.rating;
       
       // Single leg match - no draws possible
-      const match = simulatePlayoffLegf(team1Rating, team2Rating, true);
+      const match = simulatePlayoffLeg(team1Rating, team2Rating, true);
       
       return {
         team1: qf.team1.team,
