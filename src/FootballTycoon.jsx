@@ -2881,7 +2881,7 @@ function endSeason() {
   let promotionBonus = 0;
   if (promoted) {
     if (gameState.league === 5) promotionBonus = 5000000;      // £5M (was £2M) - covers L2 facilities + buffer
-    else if (gameState.league === 4) promotionBonus = 15000000;  // £15M (was £8M) - covers L1 facilities + buffer
+    else if (gameState.league === 4) promotionBonus = 10000000;  // £15M (was £8M) - covers L1 facilities + buffer
     else if (gameState.league === 3) promotionBonus = 35000000;  // £35M (was £15M) - covers Championship facilities + buffer
     else if (gameState.league === 2) promotionBonus = 75000000;  // £75M (was £30M) - covers PL facilities + buffer
   }
@@ -2906,7 +2906,7 @@ function endSeason() {
   }
 
   // Check for immediate bankruptcy (below -£10) OR 2 consecutive seasons in debt
-  if (newBalance < -20000000) {
+  if (newBalance < -40000000) {
     deleteSave();
     setGameOverReason({
       reason: 'bankruptcy',
@@ -3184,10 +3184,10 @@ function startNewSeason() {
         ratingChange = 4 + Math.floor(Math.random() * 2); // 4-5 (3% chance - late bloomer)
       } else if (roll < 0.12) {
         ratingChange = 3; // (9% chance)
-      } else if (roll < 0.45) {
-        ratingChange = 2; // (33% chance)
+      } else if (roll < 0.40) {
+        ratingChange = 2; // (28% chance)
       } else if (roll < 0.75) {
-        ratingChange = 1; // (30% chance)
+        ratingChange = 1; // (35% chance)
       } else if (roll < 0.92) {
         ratingChange = 0; // (17% chance)
       } else {
@@ -3200,10 +3200,10 @@ function startNewSeason() {
         ratingChange = 3 + Math.floor(Math.random() * 2); // 3-4 (2% chance - finding form)
       } else if (roll < 0.10) {
         ratingChange = 2; // (8% chance)
-      } else if (roll < 0.50) {
-        ratingChange = 1; // (40% chance)
+      } else if (roll < 0.40) {
+        ratingChange = 1; // (30% chance)
       } else if (roll < 0.75) {
-        ratingChange = 0; // (25% chance)
+        ratingChange = 0; // (35% chance)
       } else {
         ratingChange = -1; // (25% chance - slight decline)
       }
@@ -3448,9 +3448,9 @@ function calculateMarketValue(player, league) {
   // Age factor - salary peaks at prime years (27-29)
   let ageMultiplier = 1.0;
   if (player.age <= 20) {
-    ageMultiplier = 0.80; // Young prospects - low wages
+    ageMultiplier = 0.90; // Young prospects - low wages
   } else if (player.age <= 23) {
-    ageMultiplier = 0.95; // Developing - moderate wages
+    ageMultiplier = 1.00; // Developing - moderate wages
   } else if (player.age <= 26) {
     ageMultiplier = 1.10; // Rising prime - good wages
   } else if (player.age <= 29) {
@@ -4586,7 +4586,7 @@ if (view === 'start') {
               <li>Manage squad, sign free agents, and negotiate contracts</li>
               <li>Upgrade facilities to boost performance</li>
               <li>Navigate through 5 divisions to reach the Premier League</li>
-              <li>Survive financially - bankruptcy at -£10M or multiple heavy debt seasons end the game</li>
+              <li>Survive financially - bankruptcy at -£40M or multiple heavy debt seasons end the game</li>
               <li>Auto-saves your progress</li>
             </ul>
           </div>
