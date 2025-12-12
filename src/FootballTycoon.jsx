@@ -2419,6 +2419,14 @@ function generateSeasonFixtures(teams) {
 function endSeason() {
   const playerStanding = gameState.standings.find(t => t.team === gameState.teamName);
   const leagueData = LEAGUES[gameState.league];
+  
+  // Check for Premier League Championship WIN
+  if (gameState.league === 1 && playerStanding.position === 1) {
+    setPlWinner(true);
+    setView('plchampion');
+    // Don't return - let the season end logic continue
+  }
+  
   let promoted = false;
   let relegated = false;
   let prize = 0;
@@ -3510,65 +3518,65 @@ function calculateTransferFee(player, league) {
     if (Math.random() < 0.85) return 0;
     return Math.floor(Math.random() * 15000); // £0-15k
   }
-  
+
   // 59-62: Mostly free, some nominal fees (£0-£20k)
   if (rating <= 62) {
     if (Math.random() < 0.70) return 0;
     return Math.floor(5000 + Math.random() * 15000);
   }
-  
+
   // 63-65: Small fees (£10k-£40k)
   if (rating <= 65) {
     if (Math.random() < 0.40) return 0;
-    baseTransferFee = 10000 + ((rating - 63) / 2) * 30000;
+    baseTransferFee = 10000 + ((rating - 63) / (65 - 63)) * 30000;
   }
   // 66-68: League Two level (£40k-£80k)
   else if (rating <= 68) {
-    baseTransferFee = 40000 + ((rating - 66) / 2) * 40000;
+    baseTransferFee = 40000 + ((rating - 66) / (68 - 66)) * 40000;
   }
   // 69-72: League Two star / League One average (£80k-£160k)
   else if (rating <= 72) {
-    baseTransferFee = 80000 + ((rating - 69) / 1) * 80000;
+    baseTransferFee = 80000 + ((rating - 69) / (72 - 69)) * 80000;
   }
   // 73-75: League One starters (£250k-£600k)
-  else if (rating <= 73) {
-    baseTransferFee = 200000 + ((rating - 73) / 2) * 250000;
+  else if (rating <= 75) {
+    baseTransferFee = 250000 + ((rating - 73) / (75 - 73)) * 350000;
   }
-  // 76-78: League One star / Championship average (£450k-£800k)
+  // 76-78: League One star / Championship average (£600k-£1M)
   else if (rating <= 78) {
-    baseTransferFee = 450000 + ((rating - 76) / 1) * 250000;
+    baseTransferFee = 600000 + ((rating - 76) / (78 - 76)) * 400000;
   }
-  // 78-80: Championship starters (£1M-£2.5M)
+  // 79-80: Championship starters (£1M-£2.5M)
   else if (rating <= 80) {
-    baseTransferFee = 1000000 + ((rating - 78) / 2) * 1500000;
+    baseTransferFee = 1000000 + ((rating - 79) / (80 - 79)) * 1500000;
   }
-  // 81-83: Championship star / Low PL (£2M-£4M)
+  // 81-83: Championship star / Low PL (£2.5M-£4M)
   else if (rating <= 83) {
-    baseTransferFee = 200000 + ((rating - 81) / 1) * 2000000;
+    baseTransferFee = 2500000 + ((rating - 81) / (83 - 81)) * 200000;
   }
-  // 84-86: Championship top / PL rotation (£5M-£10M)
+  // 84-86: Championship top / PL rotation (£6M-£12M)
   else if (rating <= 86) {
-    baseTransferFee = 5000000 + ((rating - 84) / 2) * 5000000;
+    baseTransferFee = 6000000 + ((rating - 84) / (86 - 84)) * 6000000;
   }
   // 87-89: PL regulars (£16M-£30M)
   else if (rating <= 89) {
-    baseTransferFee = 16000000 + ((rating - 87) / 1) * 14000000;
+    baseTransferFee = 16000000 + ((rating - 87) / (89 - 87)) * 14000000;
   }
   // 90-93: PL good players/stars (£28M-£50M)
   else if (rating <= 93) {
-    baseTransferFee = 28000000 + ((rating - 90) / 2) * 22000000;
+    baseTransferFee = 28000000 + ((rating - 90) / (93 - 90)) * 22000000;
   }
   // 94-96: PL stars (£48M-£70M)
   else if (rating <= 96) {
-    baseTransferFee = 48000000 + ((rating - 94) / 2) * 22000000;
+    baseTransferFee = 48000000 + ((rating - 94) / (96 - 94)) * 22000000;
   }
-  // 96-97: World class (£68M-£95M)
-  else if (rating <= 97) {
-    baseTransferFee = 68000000 + ((rating - 96) / 2) * 27000000;
+  // 97-98: World class (£68M-£95M)
+  else if (rating <= 98) {
+    baseTransferFee = 68000000 + ((rating - 97) / (98 - 97)) * 27000000;
   }
-  // 98+: Elite (£130M-£180M)
+  // 99+: Elite (£130M-£180M)
   else {
-    baseTransferFee = 130000000 + ((rating - 98) / 4) * 50000000;
+    baseTransferFee = 130000000 + ((rating - 99) / (99 - 99 + 1)) * 50000000;
   }
   
   // Age modifiers - transfer value peaks earlier (22-25)
@@ -4067,7 +4075,7 @@ function listPlayerForTransfer(player, askingPrice) {
   if (priceRatio > 1.3) {
     return { 
       success: false, 
-      message: 'No offers - asking price too high (over 130% of market value).' 
+      message: 'No offers - asking price too high.' 
     };
   }
   
@@ -5803,6 +5811,85 @@ if (view === 'academy') {
           ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// Premier League Champion Screen
+if (view === 'plchampion') {
+  return (
+    <div className="game-container">
+      <div className="content-wrapper">
+        <div className="plchampion-screen">
+          <h1 className="plchampion-title">🏆 PREMIER LEAGUE CHAMPIONS! 🏆</h1>
+          
+          <div className="plchampion-details">
+            <h2 className="plchampion-club">{gameState?.teamName || 'Your Club'}</h2>
+            <p className="plchampion-text">
+              You've reached the pinnacle of English football! From humble beginnings in the National League 
+              to conquering the Premier League - an incredible journey!
+            </p>
+            
+            <div className="plchampion-stats">
+              <div className="plchampion-stat">
+                <div className="plchampion-stat-label">Seasons Played</div>
+                <div className="plchampion-stat-value">{gameState?.season}</div>
+              </div>
+              <div className="plchampion-stat">
+                <div className="plchampion-stat-label">Final League</div>
+                <div className="plchampion-stat-value">Premier League</div>
+              </div>
+              <div className="plchampion-stat">
+                <div className="plchampion-stat-label">Final Position</div>
+                <div className="plchampion-stat-value">1st 🥇</div>
+              </div>
+              <div className="plchampion-stat">
+                <div className="plchampion-stat-label">Points</div>
+                <div className="plchampion-stat-value">{playerStanding?.points}</div>
+              </div>
+              <div className="plchampion-stat">
+                <div className="plchampion-stat-label">Team Rating</div>
+                <div className="plchampion-stat-value">{calculateTeamRating(gameState.squad)}</div>
+              </div>
+              <div className="plchampion-stat">
+                <div className="plchampion-stat-label">Final Balance</div>
+                <div className="plchampion-stat-value">£{(gameState?.money / 1000000).toFixed(2)}M</div>
+              </div>
+            </div>
+
+            <div className="plchampion-journey">
+              <h3>Your Journey:</h3>
+              <p>National League → League Two → League One → Championship → Premier League → CHAMPIONS!</p>
+            </div>
+          </div>
+          
+          <div className="plchampion-buttons">
+            <button
+              onClick={() => {
+                setPlWinner(false);
+                setView('main');
+                // Continue playing
+              }}
+              className="btn btn-success btn-large btn-bold"
+            >
+              Continue Playing
+            </button>
+            
+            <button
+              onClick={() => {
+                deleteSave();
+                setView('start');
+                setGameState(null);
+                setTeamNameInput('');
+                setPlWinner(false);
+              }}
+              className="btn btn-primary btn-large btn-bold"
+            >
+              Start New Journey
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
