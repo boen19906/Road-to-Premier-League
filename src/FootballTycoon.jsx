@@ -3214,10 +3214,10 @@ function startNewSeason() {
         ratingChange = 3; // (1% chance - rare late peak)
       } else if (roll < 0.05) {
         ratingChange = 2; // (4% chance)
-      } else if (roll < 0.25) {
-        ratingChange = 1; // (20% chance)
+      } else if (roll < 0.20) {
+        ratingChange = 1; // (15% chance)
       } else if (roll < 0.60) {
-        ratingChange = 0; // (35% chance - stability)
+        ratingChange = 0; // (40% chance - stability)
       } else if (roll < 0.90) {
         ratingChange = -1; // (30% chance)
       } else {
@@ -3230,10 +3230,10 @@ function startNewSeason() {
         ratingChange = 1; // (5% chance - defying age)
       } else if (roll < 0.25) {
         ratingChange = 0; // (20% chance)
-      } else if (roll < 0.65) {
-        ratingChange = -1; // (40% chance)
-      } else if (roll < 0.90) {
-        ratingChange = -2; // (25% chance)
+      } else if (roll < 0.55) {
+        ratingChange = -1; // (30% chance)
+      } else if (roll < 0.80) {
+        ratingChange = -2; // (35% chance)
       } else {
         ratingChange = -3; // (10% chance - sharp decline)
       }
@@ -3242,14 +3242,14 @@ function startNewSeason() {
       const roll = Math.random();
       if (roll < 0.10) {
         ratingChange = 0; // (10% chance - maintaining)
-      } else if (roll < 0.40) {
-        ratingChange = -1; // (30% chance)
-      } else if (roll < 0.75) {
+      } else if (roll < 0.30) {
+        ratingChange = -1; // (20% chance)
+      } else if (roll < 0.65) {
         ratingChange = -2; // (35% chance)
-      } else if (roll < 0.95) {
+      } else if (roll < 0.85) {
         ratingChange = -3; // (20% chance)
       } else {
-        ratingChange = -4; // (5% chance - steep drop)
+        ratingChange = -4; // (15% chance - steep drop)
       }
     } else {
       // Veteran: steep decline
@@ -3538,17 +3538,17 @@ function calculateTransferFee(player, league) {
   else if (rating <= 78) {
     baseTransferFee = 450000 + ((rating - 76) / 1) * 250000;
   }
-  // 78-80: Championship starters (£1M-£4M)
+  // 78-80: Championship starters (£1M-£2.5M)
   else if (rating <= 80) {
-    baseTransferFee = 1000000 + ((rating - 78) / 2) * 3000000;
+    baseTransferFee = 1000000 + ((rating - 78) / 2) * 1500000;
   }
-  // 81-83: Championship star / Low PL (£3.5M-£8M)
+  // 81-83: Championship star / Low PL (£2M-£4M)
   else if (rating <= 83) {
-    baseTransferFee = 3500000 + ((rating - 81) / 1) * 4500000;
+    baseTransferFee = 200000 + ((rating - 81) / 1) * 2000000;
   }
-  // 84-86: Championship top / PL rotation (£7M-£18M)
+  // 84-86: Championship top / PL rotation (£5M-£10M)
   else if (rating <= 86) {
-    baseTransferFee = 7000000 + ((rating - 84) / 2) * 11000000;
+    baseTransferFee = 5000000 + ((rating - 84) / 2) * 5000000;
   }
   // 87-89: PL regulars (£16M-£30M)
   else if (rating <= 89) {
@@ -4059,137 +4059,87 @@ function releasePlayer(playerId) {
 }
 
 function listPlayerForTransfer(player, askingPrice) {
-  // Calculate realistic transfer fee (not just salary)
+  // Calculate realistic transfer fee based on rating and age
   const marketValue = calculateTransferFee(player, gameState.league);
   
-  // Determine player quality relative to current league
-  const leagueData = LEAGUES[gameState.league];
-  let playerQualityForLeague = 'average';
-  
-  switch(gameState.league) {
-    case 5: // National League (50-66 team ratings)
-      if (player.rating >= 67) playerQualityForLeague = 'star';
-      else if (player.rating >= 62) playerQualityForLeague = 'good';
-      else if (player.rating >= 55) playerQualityForLeague = 'average';
-      else playerQualityForLeague = 'poor';
-      break;
-    case 4: // League Two (58-71)
-      if (player.rating >= 71) playerQualityForLeague = 'star';
-      else if (player.rating >= 66) playerQualityForLeague = 'good';
-      else if (player.rating >= 60) playerQualityForLeague = 'average';
-      else playerQualityForLeague = 'poor';
-      break;
-    case 3: // League One (64-76)
-      if (player.rating >= 75) playerQualityForLeague = 'star';
-      else if (player.rating >= 70) playerQualityForLeague = 'good';
-      else if (player.rating >= 63) playerQualityForLeague = 'average';
-      else playerQualityForLeague = 'poor';
-      break;
-    case 2: // Championship (70-82)
-      if (player.rating >= 81) playerQualityForLeague = 'star';
-      else if (player.rating >= 76) playerQualityForLeague = 'good';
-      else if (player.rating >= 68) playerQualityForLeague = 'average';
-      else playerQualityForLeague = 'poor';
-      break;
-    case 1: // Premier League (80-95)
-      if (player.rating >= 91) playerQualityForLeague = 'star';
-      else if (player.rating >= 84) playerQualityForLeague = 'good';
-      else if (player.rating >= 78) playerQualityForLeague = 'average';
-      else playerQualityForLeague = 'poor';
-      break;
-  }
-  
-  // Check if player is old (lower leagues want experience)
-  const isOld = player.age >= 30;
-  
-  // Poor quality or old players are EASIER to sell (lower leagues want them)
-  let baseInterest;
-  if (playerQualityForLeague === 'poor' || isOld) {
-    baseInterest = 0.85; // Easy to sell to lower leagues
-  } else if (playerQualityForLeague === 'star') {
-    baseInterest = 0.95; // Star players always in demand
-  } else if (playerQualityForLeague === 'good') {
-    baseInterest = 0.80; // Good players usually get offers
-  } else {
-    baseInterest = 0.60; // Average players moderate interest
-  }
-  
-  // Adjust for pricing
+  // REJECT IMMEDIATELY if asking price is way too high
   const priceRatio = askingPrice / marketValue;
-  let priceMultiplier = 1.0;
-  
-  // Poor/old players: clubs expect fair value (not bargains)
-  if (playerQualityForLeague === 'poor' || isOld) {
-    if (priceRatio > 1.3) {
-      priceMultiplier = 0.6; // Still reject massive overpricing
-    } else if (priceRatio > 1.1) {
-      priceMultiplier = 0.85; // Slight overpricing OK
-    }
-    // Otherwise keep 1.0 - they'll pay market value
-  } else {
-    // Good/star players: normal pricing sensitivity
-    if (priceRatio > 1.5) {
-      priceMultiplier = 0.3;
-    } else if (priceRatio > 1.3) {
-      priceMultiplier = 0.5;
-    } else if (priceRatio > 1.15) {
-      priceMultiplier = 0.7;
-    } else if (priceRatio < 0.7) {
-      priceMultiplier = 1.4;
-    } else if (priceRatio < 0.85) {
-      priceMultiplier = 1.2;
-    }
+  if (priceRatio > 1.3) {
+    return { 
+      success: false, 
+      message: 'No offers - asking price too high (over 130% of market value).' 
+    };
   }
   
-  // Age factor - OLD players now EASIER to sell (reversed logic)
+  // Base interest purely on rating (not league context)
+  let baseInterest;
+  if (player.rating >= 80) {
+    baseInterest = 0.95; // Elite players always in demand
+  } else if (player.rating >= 70) {
+    baseInterest = 0.85; // Good players high demand
+  } else if (player.rating >= 60) {
+    baseInterest = 0.75; // Solid players moderate-high demand
+  } else if (player.rating >= 50) {
+    baseInterest = 0.70; // Average players moderate demand
+  } else {
+    baseInterest = 0.65; // Low-rated players still sellable
+  }
+  
+  // Pricing adjustment (now capped at 1.3x)
+  let priceMultiplier = 1.0;
+  if (priceRatio > 1.2) {
+    priceMultiplier = 0.70; // 1.2-1.3x overpriced
+  } else if (priceRatio > 1.1) {
+    priceMultiplier = 0.85; // 1.1-1.2x slightly high
+  } else if (priceRatio > 1.05) {
+    priceMultiplier = 0.95; // 1.05-1.1x fair
+  } else if (priceRatio < 0.80) {
+    priceMultiplier = 1.25; // Under 80% = bargain
+  } else if (priceRatio < 0.90) {
+    priceMultiplier = 1.15; // 80-90% = good deal
+  }
+  // else 0.90-1.05 = keep 1.0 (fair price)
+  
+  // Age factor (calculateTransferFee already handles this, but affects interest too)
   let ageFactor = 1.0;
   if (player.age <= 23) {
-    ageFactor = 1.3; // Young prospects in high demand
+    ageFactor = 1.20; // Young prospects high demand
   } else if (player.age <= 26) {
-    ageFactor = 1.15; // Prime age
+    ageFactor = 1.10; // Prime age good demand
   } else if (player.age >= 32) {
-    ageFactor = 1.2; // OLD players wanted by lower leagues
+    ageFactor = 1.15; // Old players wanted by lower leagues
   } else if (player.age >= 30) {
-    ageFactor = 1.1; // Experienced players wanted
+    ageFactor = 1.05; // Experienced players slight boost
   }
   
   // Position factor
   let positionFactor = 1.0;
   if (player.position === 'GK') {
-    positionFactor = 0.7;
+    positionFactor = 0.75; // GKs harder to sell
+  } else if (player.position === 'FWD') {
+    positionFactor = 1.10; // Goalscorers easier to sell
   }
   
   // Calculate final offer chance
   let offerChance = baseInterest * priceMultiplier * ageFactor * positionFactor;
-  offerChance = Math.max(0.10, Math.min(0.98, offerChance));
+  offerChance = Math.max(0.15, Math.min(0.98, offerChance));
   
   const hasOffer = Math.random() < offerChance;
   
   if (hasOffer) {
+    // Generate counter offer
     let offerMultiplier;
     
-    // Poor/old players: clubs pay market value
-    if (playerQualityForLeague === 'poor' || isOld) {
-      if (priceRatio > 1.2) {
-        offerMultiplier = 0.85 + Math.random() * 0.10; // 85-95% if overpriced
-      } else {
-        offerMultiplier = 0.95 + Math.random() * 0.10; // 95-105% at market value
-      }
+    if (priceRatio > 1.2) {
+      offerMultiplier = 0.85 + Math.random() * 0.10; // 85-95% if overpriced
+    } else if (priceRatio > 1.05) {
+      offerMultiplier = 0.92 + Math.random() * 0.08; // 92-100% if slightly high
+    } else if (priceRatio >= 0.95 && priceRatio <= 1.05) {
+      offerMultiplier = 0.98 + Math.random() * 0.07; // 98-105% at market value
+    } else if (priceRatio < 0.80) {
+      offerMultiplier = 1.00 + Math.random() * 0.10; // 100-110% for bargains
     } else {
-      // Good/star players: normal offer logic
-      if (priceRatio > 1.4) {
-        offerMultiplier = 0.60 + Math.random() * 0.15; // 60-75%
-      } else if (priceRatio > 1.2) {
-        offerMultiplier = 0.75 + Math.random() * 0.15; // 75-90%
-      } else if (priceRatio > 1.05) {
-        offerMultiplier = 0.90 + Math.random() * 0.10; // 90-100%
-      } else if (priceRatio >= 0.95 && priceRatio <= 1.05) {
-        offerMultiplier = 0.98 + Math.random() * 0.07; // 98-105%
-      } else if (priceRatio < 0.80) {
-        offerMultiplier = 1.00 + Math.random() * 0.10; // 100-110%
-      } else {
-        offerMultiplier = 0.95 + Math.random() * 0.10; // 95-105%
-      }
+      offerMultiplier = 0.95 + Math.random() * 0.10; // 95-105% for good deals
     }
     
     const counterOffer = Math.floor(askingPrice * offerMultiplier);
@@ -4200,25 +4150,22 @@ function listPlayerForTransfer(player, askingPrice) {
         player,
         askingPrice,
         counterOffer,
-        status: 'pending',
-        quality: playerQualityForLeague
+        status: 'pending'
       }]
     }));
     
     return { 
       success: true, 
       message: counterOffer === 0 
-        ? `Offer received: Free transfer (${playerQualityForLeague} player for this league)` 
-        : `Offer received: £${(counterOffer / 1000).toFixed(0)}k (${playerQualityForLeague} player for this league)`, 
+        ? `Offer received: Free transfer` 
+        : `Offer received: £${(counterOffer / 1000).toFixed(0)}k`, 
       counterOffer 
     };
   } else {
-    let reason = 'No offers received.';
+    let reason = 'No offers this time. Try adjusting price or waiting.';
     
-    if (priceRatio > 1.3) {
+    if (priceRatio > 1.15) {
       reason = 'No offers - asking price too high.';
-    } else {
-      reason = 'No offers this time. Try again or adjust price.';
     }
     
     return { success: false, message: reason };
@@ -5746,7 +5693,7 @@ if (view === 'academy') {
                       <input
                         type="number"
                         min="1"
-                        max="5"
+                        max="3"
                         value={contractOffer.years}
                         onChange={(e) => {
                           const value = e.target.value;
@@ -5754,7 +5701,7 @@ if (view === 'academy') {
                             setContractOffer(prev => ({ ...prev, years: '' }));
                           } else {
                             const numValue = parseInt(value);
-                            if (numValue >= 1 && numValue <= 5) {
+                            if (numValue >= 1 && numValue <= 3) {
                               setContractOffer(prev => ({ ...prev, years: numValue }));
                             }
                           }
@@ -5808,7 +5755,7 @@ if (view === 'academy') {
                   </div>
                   
                   <div className="contract-summary">
-                    <strong>Contract Terms:</strong>
+                    <strong>Contract Terms: (3-Year Max Length)</strong>
                     <br />
                     Annual Salary: £{((contractOffer.salary || player.salary) / 1000).toFixed(0)}k/year
                     <br />
