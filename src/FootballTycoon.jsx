@@ -6073,7 +6073,7 @@ return (
               className="btn btn-warning btn-bold btn-pulse"
             >
               <DollarSign size={20} />
-              Pre-Season Transfers (Sell Players)
+              Transfers (Sell Players)
             </button>
             
             {/* Transfers button - only during preseason */}
