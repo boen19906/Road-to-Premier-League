@@ -885,17 +885,6 @@
     margin-bottom: 0.5rem;
   }
 
-  /* Fixed notification modal - top right corner */
-  .notification-modal {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    z-index: 1000;
-    width: 400px;
-    max-width: calc(100vw - 40px);
-    animation: slideInRight 0.3s ease-out;
-  }
-
   .notification-modal.fade-out {
     animation: fadeOut 0.5s ease-out forwards;
   }
@@ -960,6 +949,191 @@
     color: #d1d5db;
     margin-top: 0.25rem;
   }
+
+  /* Career History Modal */
+.notification-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+}
+
+.career-history-modal {
+  background: rgba(17, 24, 39, 0.98);
+  border: 2px solid rgba(59, 130, 246, 0.3);
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 1400px;
+  width: 95%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  position: relative;
+}
+
+.career-history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid rgba(59, 130, 246, 0.3);
+}
+
+.career-history-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.career-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  padding: 20px;
+  background: rgba(31, 41, 55, 0.6);
+  border-radius: 8px;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.career-summary-stat {
+  text-align: center;
+}
+
+.career-summary-label {
+  font-size: 0.875rem;
+  color: rgba(156, 163, 175, 1);
+  margin-bottom: 8px;
+}
+
+.career-summary-value {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: rgba(59, 130, 246, 1);
+}
+
+.career-history-table-container {
+  overflow-x: auto;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+/* Career History Table Specific Styling */
+.career-history-table-container .standings-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.career-history-table-container .standings-table th:nth-child(1),
+.career-history-table-container .standings-table td:nth-child(1) {
+  width: 8%;
+  text-align: center;
+}
+
+.career-history-table-container .standings-table th:nth-child(2),
+.career-history-table-container .standings-table td:nth-child(2) {
+  width: 20%;
+}
+
+.career-history-table-container .standings-table th:nth-child(3),
+.career-history-table-container .standings-table td:nth-child(3) {
+  width: 10%;
+  text-align: center;
+}
+
+.career-history-table-container .standings-table th:nth-child(4),
+.career-history-table-container .standings-table td:nth-child(4) {
+  width: 10%;
+  text-align: center;
+}
+
+.career-history-table-container .standings-table th:nth-child(5),
+.career-history-table-container .standings-table td:nth-child(5) {
+  width: 20%;
+  text-align: center;
+}
+
+.career-history-table-container .standings-table th:nth-child(6),
+.career-history-table-container .standings-table td:nth-child(6) {
+  width: 16%;
+  text-align: center;
+}
+
+.career-history-table-container .standings-table th:nth-child(7),
+.career-history-table-container .standings-table td:nth-child(7) {
+  width: 16%;
+  text-align: center;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .career-history-modal {
+    width: 95%;
+    padding: 16px;
+    max-height: 90vh;
+  }
+  
+  .career-summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .career-history-header {
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  
+  .career-history-header button {
+    width: 100%;
+  }
+  
+  .standings-table {
+    font-size: 0.75rem;
+  }
+  
+  .standings-table th,
+  .standings-table td {
+    padding: 0.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .career-summary {
+    grid-template-columns: 1fr;
+  }
+  
+  .career-summary-value {
+    font-size: 1.25rem;
+  }
+}
+
+/* Career History Button */
+.career-history-button {
+  margin-top: 12px;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  text-align: center;
+}
+
+/* Notification messages (top right) */
+.notification-toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+  width: 400px;
+  max-width: calc(100vw - 40px);
+  animation: slideInRight 0.3s ease-out;
+}
   
   .form-grid {
     display: grid;

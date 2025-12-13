@@ -160,6 +160,7 @@ const [selectedPlayer, setSelectedPlayer] = useState(null);
 const [contractOffer, setContractOffer] = useState({ years: 3, salary: 0 });
 const [teamNameInput, setTeamNameInput] = useState('');
 const [gameOverReason, setGameOverReason] = useState(null);
+const [showCareerHistory, setShowCareerHistory] = useState(false);
 
 // Initialize game state
 const [gameState, setGameState] = useState(() => {
@@ -198,7 +199,9 @@ function initializeGame(teamName) {
   leagueMembership: initializeLeagueMembership(teamName || 'Your Club FC'), // FIRST
   teamRatings: initializeTeamRatings(teamName || 'Your Club FC'), // SECOND
   fixtureSchedule: null,
-  academyPlayers: [] // Add this line 
+  lastPromotionBonusSeason: {},
+  academyPlayers: [], 
+  careerHistory: []
 };
 
 // NOW generate standings using both membership and ratings
@@ -2886,12 +2889,19 @@ function endSeason() {
     (1 + positionBonus * 0.2);
 
   // Add promotion bonus - scaled to cover facility upgrades plus operating cushion
+  // BUT only if it's been 3+ seasons since last bonus from this league
   let promotionBonus = 0;
   if (promoted) {
-    if (gameState.league === 5) promotionBonus = 5000000;      // £5M (was £2M) - covers L2 facilities + buffer
-    else if (gameState.league === 4) promotionBonus = 10000000;  // £15M (was £8M) - covers L1 facilities + buffer
-    else if (gameState.league === 3) promotionBonus = 35000000;  // £35M (was £15M) - covers Championship facilities + buffer
-    else if (gameState.league === 2) promotionBonus = 75000000;  // £75M (was £30M) - covers PL facilities + buffer
+    const seasonsSinceLastBonus = gameState.lastPromotionBonusSeason[gameState.league] 
+      ? gameState.season - gameState.lastPromotionBonusSeason[gameState.league]
+      : 999; // If never received, set to high number
+    
+    if (seasonsSinceLastBonus >= 3) {
+      if (gameState.league === 5) promotionBonus = 5000000;      // £5M
+      else if (gameState.league === 4) promotionBonus = 10000000;  // £10M
+      else if (gameState.league === 3) promotionBonus = 35000000;  // £35M
+      else if (gameState.league === 2) promotionBonus = 75000000;  // £75M
+    }
   }
 
   const totalRevenue = tvRevenue + ticketRevenue + sponsorshipRevenue + merchandiseRevenue + prize + promotionBonus;
@@ -2957,6 +2967,9 @@ function endSeason() {
     season: prev.season + 1,
     matchday: 0,
     money: newBalance,
+    lastPromotionBonusSeason: promotionBonus > 0 
+    ? { ...prev.lastPromotionBonusSeason, [prev.league]: prev.season } // ← ADD THIS
+    : prev.lastPromotionBonusSeason,
     consecutiveSeasonsInDebt: consecutiveDebtSeasons, // Add this
     reputation: (() => {
     let repChange = 0;
@@ -3025,6 +3038,20 @@ function endSeason() {
     facilitiesCost,
     retirees: retirees.map(p => ({ name: p.name, position: p.position, rating: p.rating }))
   },
+
+    // ← ADD THIS BLOCK
+    careerHistory: [...prev.careerHistory, {
+      season: prev.season,
+      league: LEAGUES[gameState.league].name,
+      leagueNumber: gameState.league,
+      position: playerStanding.position,
+      points: playerStanding.points,
+      promoted: promoted,
+      relegated: relegated,
+      playoffResult: playoffDetails ? playoffDetails.stage : null,
+      netIncome: netIncome,
+      finalBalance: newBalance
+    }],
     seasonPhase: 'offseason',
     contractNegotiations,
     paused: true,
@@ -4161,7 +4188,7 @@ function listPlayerForTransfer(player, askingPrice) {
         status: 'pending'
       }]
     }));
-    
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     return { 
       success: true, 
       message: counterOffer === 0 
@@ -4673,7 +4700,7 @@ if (view === 'freeagents') {
         </div>
 
         {freeAgentMessage && (
-        <div className="notification-modal">
+        <div className="notification-toast">
           <div className={`message-card ${freeAgentMessage.accepted ? 'message-success' : 'message-error'}`}>
             <div className="message-title">
               {freeAgentMessage.walkedAway ? (
@@ -5124,7 +5151,7 @@ if (view === 'contracts') {
         </div>
 
         {freeAgentMessage && (
-        <div className="notification-modal">
+        <div className="notification-toast">
           <div className={`message-card ${freeAgentMessage.accepted ? 'message-success' : 'message-error'}`}>
             <div className="message-title">
               {freeAgentMessage.walkedAway ? (
@@ -5313,7 +5340,7 @@ if (view === 'contracts') {
                         // If playerId doesn't match or salary is empty, use player's market value
                         const salary = (contractOffer.playerId === player.id && contractOffer.salary) 
                           ? contractOffer.salary 
-                          : (player.marketValue || player.salary);
+                          : (player.marketValue || player.salary); // ← BUG: Falls back to player.salary
                         offerContract(player, years, salary);
                       }}
                       className="btn btn-primary btn-bold"
@@ -5391,7 +5418,7 @@ if (view === 'transfers') {
         </div>
 
         {transferMessage && (
-        <div className="notification-modal">
+        <div className="notification-toast">
           <div className={`message-card ${transferMessage.success ? 'message-success' : 'message-error'}`}>
             <div className="message-title">{transferMessage.message}</div>
             {transferMessage.counterOffer && (
@@ -5537,7 +5564,7 @@ if (view === 'transfers') {
                                 askingPrice
                               });
                               setSelectedPlayer(null);
-                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                              
                             }}
                             className="btn btn-success btn-bold"
                           >
@@ -6755,8 +6782,106 @@ return (
                     : 'None'}
                 </span>
               </div>
+
+              {/* ← ADD THIS BUTTON */}
+              {gameState.careerHistory && gameState.careerHistory.length > 0 && (
+                <button
+                  onClick={() => setShowCareerHistory(true)}
+                  className="btn btn-primary btn-bold career-history-button"
+                >
+                  📊 View Career History
+                </button>
+              )}
             </div>
           </div>
+          {/* ← ADD CAREER HISTORY MODAL HERE */}
+        {showCareerHistory && (
+          <div className="notification-modal" style={{ zIndex: 1000 }}>
+            <div className="career-history-modal">
+              <div className="career-history-header">
+                <h2 className="section-title">📊 Career History - {gameState.teamName}</h2>
+                <button 
+                  onClick={() => setShowCareerHistory(false)}
+                  className="btn btn-secondary"
+                >
+                  Close
+                </button>
+              </div>
+              
+              <div className="career-history-content">
+                <div className="career-summary">
+                  <div className="career-summary-stat">
+                    <div className="career-summary-label">Total Seasons</div>
+                    <div className="career-summary-value">{gameState.careerHistory.length}</div>
+                  </div>
+                  <div className="career-summary-stat">
+                    <div className="career-summary-label">Current League</div>
+                    <div className="career-summary-value">{LEAGUES[gameState.league].name}</div>
+                  </div>
+                  <div className="career-summary-stat">
+                    <div className="career-summary-label">Promotions</div>
+                    <div className="career-summary-value text-success">
+                      {gameState.careerHistory.filter(s => s.promoted).length}
+                    </div>
+                  </div>
+                  <div className="career-summary-stat">
+                    <div className="career-summary-label">Relegations</div>
+                    <div className="career-summary-value text-danger">
+                      {gameState.careerHistory.filter(s => s.relegated).length}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="career-history-table-container">
+                  <table className="standings-table">
+                    <thead>
+                      <tr>
+                        <th>Season</th>
+                        <th>League</th>
+                        <th>Position</th>
+                        <th>Points</th>
+                        <th>Result</th>
+                        <th>Net Income</th>
+                        <th>Balance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {gameState.careerHistory.map((season, index) => (
+                        <tr key={index} className={
+                          season.promoted ? 'promotion-auto' :
+                          season.relegated ? 'relegation' :
+                          season.playoffResult ? 'promotion-playoff' :
+                          ''
+                        }>
+                          <td className="text-center text-bold">{season.season}</td>
+                          <td>{season.league}</td>
+                          <td className="text-center">{season.position}{getOrdinal(season.position)}</td>
+                          <td className="text-center">{season.points}</td>
+                          <td className="text-center">
+                            {season.promoted && <span className="text-success">⬆️ Promoted</span>}
+                            {season.relegated && <span className="text-danger">⬇️ Relegated</span>}
+                            {season.playoffResult && !season.promoted && !season.relegated && (
+                              <span className="text-warning">🏆 {season.playoffResult}</span>
+                            )}
+                            {!season.promoted && !season.relegated && !season.playoffResult && (
+                              <span>—</span>
+                            )}
+                          </td>
+                          <td className={`text-center ${season.netIncome >= 0 ? 'text-success' : 'text-danger'}`}>
+                            £{(season.netIncome / 1000000).toFixed(2)}M
+                          </td>
+                          <td className={`text-center ${season.finalBalance >= 0 ? '' : 'text-danger'}`}>
+                            £{(season.finalBalance / 1000000).toFixed(2)}M
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
         </div>
       </div>
     </div>
