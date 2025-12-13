@@ -2424,7 +2424,7 @@ function endSeason() {
   if (gameState.league === 1 && playerStanding.position === 1) {
     setPlWinner(true);
     setView('plchampion');
-    // Don't return - let the season end logic continue
+    console.log("Premier League Champion!");
   }
   
   let promoted = false;
@@ -3552,7 +3552,7 @@ function calculateTransferFee(player, league) {
   }
   // 81-83: Championship star / Low PL (£2.5M-£4M)
   else if (rating <= 83) {
-    baseTransferFee = 2500000 + ((rating - 81) / (83 - 81)) * 200000;
+    baseTransferFee = 2500000 + ((rating - 81) / (83 - 81)) * 1500000;  // ✅ CORRECT
   }
   // 84-86: Championship top / PL rotation (£6M-£12M)
   else if (rating <= 86) {
