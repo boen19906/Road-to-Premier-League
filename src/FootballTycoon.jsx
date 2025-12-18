@@ -3030,6 +3030,9 @@ function endSeason() {
     consecutiveSeasonsInDebt: consecutiveDebtSeasons, // Add this
     // UPDATE PARACHUTE PAYMENTS
     parachutePayments: (() => {
+      // Calculate the new league first
+      const nextLeague = promoted ? Math.max(1, prev.league - 1) : (relegated ? Math.min(5, prev.league + 1) : prev.league);
+      
       // If relegated FROM Premier League (league 1), start parachute payments
       if (relegated && prev.league === 1) {
         return {
@@ -3040,7 +3043,7 @@ function endSeason() {
       }
       
       // If promoted back to Premier League, cancel parachute payments
-      if (promoted && newLeague === 1 && prev.parachutePayments.active) {
+      if (promoted && nextLeague === 1 && prev.parachutePayments.active) {
         return {
           active: false,
           yearsPaid: 0,
@@ -6085,17 +6088,15 @@ return (
             <div className="money-label">Balance</div>
             <button
               onClick={() => {
-                if (window.confirm('Resign from your position? This will end your save and return to menu.')) {
-                  deleteSave();
-                  setGameState(null);
-                  setView('start');
-                  setTeamNameInput('');
-                }
+                setGameState(null);
+                setView('start');
+                setTeamNameInput('');
+              
               }}
               className="btn btn-danger btn-small"
               style={{ marginTop: '8px' }}
             >
-              Resign
+              Main Menu
             </button>
           </div>
         </div>
@@ -6155,7 +6156,7 @@ return (
                 className="btn btn-warning btn-bold btn-pulse"
               >
                 <DollarSign size={20} />
-                Transfer Market (OPEN)
+                Transfer Market (Sell Players)
               </button>
             )}
             
