@@ -1823,6 +1823,108 @@
   font-size: 20px;
 }
 
+/* Saves List */
+.saves-list-container {
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 0.5rem;
+  padding: 2rem;
+  width: 100%;
+  max-width: 700px;
+  margin-bottom: 2rem;
+}
+
+.saves-list-title {
+  font-size: 1.5rem;
+  font-weight: bold;
+  margin-bottom: 1.5rem;
+  text-align: center;
+  color: white;
+}
+
+.saves-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.save-item {
+  background: rgba(31, 41, 55, 0.8);
+  border-radius: 0.5rem;
+  padding: 1.25rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1.5rem;
+  border: 2px solid rgba(59, 130, 246, 0.2);
+  transition: all 0.2s;
+}
+
+.save-item:hover {
+  border-color: #3b82f6;
+  background: rgba(31, 41, 55, 1);
+}
+
+.save-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.save-team-name {
+  font-size: 1.5rem;
+  font-weight: bold;
+  margin-bottom: 0.5rem;
+  color: #60a5fa;
+}
+
+.save-details {
+  font-size: 1rem;
+  color: #d1d5db;
+  margin-bottom: 0.25rem;
+  font-weight: 500;
+}
+
+.save-timestamp {
+  font-size: 0.8rem;
+  color: #9ca3af;
+}
+
+.save-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.save-actions .btn {
+  min-width: 90px;
+  padding: 0.75rem 1.25rem;
+}
+
+@media (max-width: 640px) {
+  .save-item {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+  }
+  
+  .save-actions {
+    width: 100%;
+  }
+  
+  .save-actions button {
+    flex: 1;
+  }
+  
+  .saves-list-container {
+    padding: 1rem;
+  }
+  
+  .save-team-name {
+    font-size: 1.25rem;
+  }
+}
+
 .season-actions {
   margin-top: 24px;
   padding-top: 24px;

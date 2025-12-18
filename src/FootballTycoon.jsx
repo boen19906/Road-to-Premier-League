@@ -5,19 +5,44 @@ import './FootballTycoon.css';
 const FootballTycoon = () => {
   const SAVE_KEY = 'footballTycoonSave';
 
-  // Save game to localStorage
+  // Save game to localStorage with team name
   function saveGame(state) {
     try {
-      localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+      const saveKey = `footballTycoonSave_${state.teamName}`;
+      const saveData = {
+        ...state,
+        lastSaved: new Date().toISOString()
+      };
+      localStorage.setItem(saveKey, JSON.stringify(saveData));
+      
+      // Update list of all saves
+      const allSaves = getAllSaves();
+      if (!allSaves.some(s => s.teamName === state.teamName)) {
+        allSaves.push({
+          teamName: state.teamName,
+          saveKey: saveKey,
+          lastSaved: saveData.lastSaved
+        });
+        localStorage.setItem('footballTycoonSavesList', JSON.stringify(allSaves));
+      } else {
+        // Update last saved time
+        const updated = allSaves.map(s => 
+          s.teamName === state.teamName 
+            ? { ...s, lastSaved: saveData.lastSaved }
+            : s
+        );
+        localStorage.setItem('footballTycoonSavesList', JSON.stringify(updated));
+      }
     } catch (error) {
       console.error('Failed to save game:', error);
     }
   }
 
-  // Load game from localStorage
-  function loadGame() {
+  // Load specific game by team name
+  function loadGame(teamName) {
     try {
-      const saved = localStorage.getItem(SAVE_KEY);
+      const saveKey = `footballTycoonSave_${teamName}`;
+      const saved = localStorage.getItem(saveKey);
       if (saved) {
         return JSON.parse(saved);
       }
@@ -27,10 +52,29 @@ const FootballTycoon = () => {
     return null;
   }
 
-  // Delete save
-  function deleteSave() {
+  // Get all available saves
+  function getAllSaves() {
     try {
-      localStorage.removeItem(SAVE_KEY);
+      const savesList = localStorage.getItem('footballTycoonSavesList');
+      if (savesList) {
+        return JSON.parse(savesList);
+      }
+    } catch (error) {
+      console.error('Failed to load saves list:', error);
+    }
+    return [];
+  }
+
+  // Delete specific save
+  function deleteSave(teamName) {
+    try {
+      const saveKey = `footballTycoonSave_${teamName}`;
+      localStorage.removeItem(saveKey);
+      
+      // Update saves list
+      const allSaves = getAllSaves();
+      const filtered = allSaves.filter(s => s.teamName !== teamName);
+      localStorage.setItem('footballTycoonSavesList', JSON.stringify(filtered));
     } catch (error) {
       console.error('Failed to delete save:', error);
     }
@@ -162,11 +206,9 @@ const [teamNameInput, setTeamNameInput] = useState('');
 const [gameOverReason, setGameOverReason] = useState(null);
 const [showCareerHistory, setShowCareerHistory] = useState(false);
 
-// Initialize game state
 const [gameState, setGameState] = useState(() => {
-  // Try to load saved game on initial mount
-  const savedGame = loadGame();
-  return savedGame;
+  // Don't auto-load on mount - let user choose
+  return null;
 });
 
 function initializeGame(teamName) {
@@ -4487,13 +4529,13 @@ const playerStanding = gameState ? gameState.standings.find(t => t.team === game
 
 // Start Screen
 if (view === 'start') {
-  const hasSavedGame = loadGame() !== null;
+  const allSaves = getAllSaves();
   
   return (
     <div className="game-container">
       <div className="content-wrapper">
         <div className="start-screen">
-          {/* Add logo */}
+          {/* Logo */}
           <img 
             src="/RTP_LOGO.png" 
             alt="Road to the Premier League Logo" 
@@ -4502,37 +4544,64 @@ if (view === 'start') {
           <h1 className="start-title">Road to the Premier League</h1>
           <p className="start-subtitle">Build your club from the National League to the top of English football</p>
           
-          {hasSavedGame && (
-            <div className="saved-game-notice">
-              <h3>Saved Game Detected!</h3>
-              <div className="button-group">
-                <button
-                  onClick={() => {
-                    const saved = loadGame();
-                    setGameState(saved);
-                    setView('main');
-                  }}
-                  className="btn btn-success btn-large btn-bold"
-                >
-                  Continue Saved Game
-                </button>
-                <button
-                  onClick={() => {
-                    if (window.confirm('Delete saved game and start fresh?')) {
-                      deleteSave();
-                      setGameState(null);
-                    }
-                  }}
-                  className="btn btn-danger"
-                >
-                  Delete Save
-                </button>
+          {/* Existing Saves */}
+          {allSaves.length > 0 && (
+            <div className="saves-list-container">
+              <h2 className="saves-list-title">Your Saves</h2>
+              <div className="saves-list">
+                {allSaves
+                  .sort((a, b) => new Date(b.lastSaved) - new Date(a.lastSaved))
+                  .map((save) => {
+                    const saveData = loadGame(save.teamName);
+                    const leagueName = saveData ? LEAGUES[saveData.league].name : 'Unknown';
+                    const season = saveData ? saveData.season : '?';
+                    const money = saveData ? (saveData.money / 1000000).toFixed(2) : '0.00';
+                    
+                    return (
+                      <div key={save.teamName} className="save-item">
+                        <div className="save-info">
+                          <div className="save-team-name">{save.teamName}</div>
+                          <div className="save-details">
+                            Season {season} | {leagueName} | £{money}M
+                          </div>
+                          <div className="save-timestamp">
+                            Last played: {new Date(save.lastSaved).toLocaleDateString()} at {new Date(save.lastSaved).toLocaleTimeString()}
+                          </div>
+                        </div>
+                        <div className="save-actions">
+                          <button
+                            onClick={() => {
+                              const loaded = loadGame(save.teamName);
+                              setGameState(loaded);
+                              setView('main');
+                            }}
+                            className="btn btn-success btn-bold"
+                          >
+                            Load
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (window.confirm(`Delete save for ${save.teamName}?`)) {
+                                deleteSave(save.teamName);
+                                // Force re-render
+                                setGameState(null);
+                              }
+                            }}
+                            className="btn btn-danger"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
               </div>
             </div>
           )}
           
+          {/* New Game Form */}
           <div className="start-form">
-            <h2 className="start-form-title">{hasSavedGame ? 'Start New Game' : 'Create Your Club'}</h2>
+            <h2 className="start-form-title">Start New Game</h2>
             <div className="form-group">
               <label>Club Name</label>
               <input
@@ -4547,16 +4616,22 @@ if (view === 'start') {
             
             <button
               onClick={() => {
-                if (hasSavedGame && !window.confirm('This will overwrite your saved game. Continue?')) {
-                  return;
-                }
                 const name = teamNameInput.trim() || 'Your Club FC';
-                deleteSave(); // Clear old save
+                
+                // Check if save already exists
+                const allSaves = getAllSaves();
+                if (allSaves.some(s => s.teamName === name)) {
+                  if (!window.confirm(`A save with the name "${name}" already exists. Overwrite it?`)) {
+                    return;
+                  }
+                  deleteSave(name);
+                }
+                
                 initializeGame(name);
               }}
               className="btn btn-success btn-large btn-bold start-button"
             >
-              {hasSavedGame ? 'Start New Game' : 'Start Journey'}
+              Start Journey
             </button>
           </div>
           
@@ -4569,6 +4644,7 @@ if (view === 'start') {
               <li>Upgrade facilities to boost performance</li>
               <li>Navigate through 5 divisions to reach the Premier League</li>
               <li>Survive financially - bankruptcy at -£40M or multiple heavy debt seasons end the game</li>
+              <li>Multiple save slots - manage different clubs!</li>
               <li>Auto-saves your progress</li>
             </ul>
           </div>
@@ -4639,6 +4715,7 @@ if (view === 'gameover') {
           
           <button
             onClick={() => {
+              // Don't delete current save - just return to menu
               setView('start');
               setGameState(null);
               setTeamNameInput('');
@@ -4646,7 +4723,7 @@ if (view === 'gameover') {
             }}
             className="btn btn-primary btn-large btn-bold"
           >
-            Start New Game
+            Back to Menu
           </button>
         </div>
       </div>
