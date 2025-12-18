@@ -198,6 +198,7 @@ const TEAM_NAMES = {
 
 const [freeAgentMessage, setFreeAgentMessage] = useState(null);
 const [transferMessage, setTransferMessage] = useState(null);
+const [refreshSaves, setRefreshSaves] = useState(0); 
 
 const [view, setView] = useState('start'); // start, main, freeagents, standings, contracts, gameover, transfer, academy
 const [selectedPlayer, setSelectedPlayer] = useState(null);
@@ -229,6 +230,11 @@ function initializeGame(teamName) {
   freeAgents: [],
   seasonPhase: 'regular',
   contractNegotiations: [],
+  parachutePayments: {
+    active: false,
+    yearsPaid: 0,
+    remainingYears: 0
+  },
   averageAttendance: 0,
   totalAttendance: 0,
   accumulatedTicketRevenue: 0,
@@ -2929,7 +2935,16 @@ function endSeason() {
     (0.8 + Math.random() * 0.4) *
     (1 + reputationBonus * 0.3) *
     (1 + positionBonus * 0.2);
+  // Calculate parachute payments
+  let parachutePayment = 0;
+  const parachuteSchedule = [55000000, 45000000, 20000000]; // £55M, £45M, £20M
 
+  if (gameState.parachutePayments.active && gameState.parachutePayments.yearsPaid < 3) {
+    parachutePayment = parachuteSchedule[gameState.parachutePayments.yearsPaid];
+    console.log(`Parachute payment year ${gameState.parachutePayments.yearsPaid + 1}: £${(parachutePayment / 1000000).toFixed(0)}M`);
+  }
+
+  
   // Add promotion bonus - scaled to cover facility upgrades plus operating cushion
   // BUT only if it's been 3+ seasons since last bonus from this league
   let promotionBonus = 0;
@@ -2946,7 +2961,7 @@ function endSeason() {
     }
   }
 
-  const totalRevenue = tvRevenue + ticketRevenue + sponsorshipRevenue + merchandiseRevenue + prize + promotionBonus;
+  const totalRevenue = tvRevenue + ticketRevenue + sponsorshipRevenue + merchandiseRevenue + prize + promotionBonus + parachutePayment;
   
   const wagesCost = gameState.squad.reduce((sum, p) => sum + p.salary, 0);
   const facilitiesCost = gameState.facilities.reduce((sum, f) => 
@@ -3013,6 +3028,47 @@ function endSeason() {
     ? { ...prev.lastPromotionBonusSeason, [prev.league]: prev.season } // ← ADD THIS
     : prev.lastPromotionBonusSeason,
     consecutiveSeasonsInDebt: consecutiveDebtSeasons, // Add this
+    // UPDATE PARACHUTE PAYMENTS
+    parachutePayments: (() => {
+      // If relegated FROM Premier League (league 1), start parachute payments
+      if (relegated && prev.league === 1) {
+        return {
+          active: true,
+          yearsPaid: 0,
+          remainingYears: 3
+        };
+      }
+      
+      // If promoted back to Premier League, cancel parachute payments
+      if (promoted && newLeague === 1 && prev.parachutePayments.active) {
+        return {
+          active: false,
+          yearsPaid: 0,
+          remainingYears: 0
+        };
+      }
+      
+      // If parachute payments are active, increment year
+      if (prev.parachutePayments.active && prev.parachutePayments.yearsPaid < 3) {
+        const newYearsPaid = prev.parachutePayments.yearsPaid + 1;
+        return {
+          active: newYearsPaid < 3, // Deactivate after 3 years
+          yearsPaid: newYearsPaid,
+          remainingYears: Math.max(0, 3 - newYearsPaid)
+        };
+      }
+      
+      // If re-relegated from Premier League while parachute payments were inactive
+      if (relegated && prev.league === 1 && !prev.parachutePayments.active) {
+        return {
+          active: true,
+          yearsPaid: 0,
+          remainingYears: 3
+        };
+      }
+      
+      return prev.parachutePayments;
+    })(),
     reputation: (() => {
     let repChange = 0;
     const currentRep = prev.reputation;
@@ -3070,6 +3126,7 @@ function endSeason() {
     ticketRevenue,
     sponsorshipRevenue,
     merchandiseRevenue,
+    parachutePayment,
     prize,
     costs: totalCosts, 
     net: netIncome,
@@ -4583,8 +4640,7 @@ if (view === 'start') {
                             onClick={() => {
                               if (window.confirm(`Delete save for ${save.teamName}?`)) {
                                 deleteSave(save.teamName);
-                                // Force re-render
-                                setGameState(null);
+                                setRefreshSaves(prev => prev + 1); // Force re-render by changing state
                               }
                             }}
                             className="btn btn-danger"
@@ -6316,6 +6372,12 @@ return (
                   <div className="finance-row text-success">
                     <span>🎉 Board Promotion Bonus:</span>
                     <span>£{(gameState.lastSeasonFinish.promotionBonus / 1000000).toFixed(2)}M</span>
+                  </div>
+                )}
+                {gameState.lastSeasonFinish.parachutePayment > 0 && (
+                  <div className="finance-row text-primary">
+                    <span>💰 Parachute Payment (Year {gameState.lastSeasonFinish.parachuteYear}/3):</span>
+                    <span>£{(gameState.lastSeasonFinish.parachutePayment / 1000000).toFixed(2)}M</span>
                   </div>
                 )}
                 <div className="finance-row finance-total">
